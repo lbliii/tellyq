@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from queue import Empty, Queue
 from threading import Event, Lock
 from time import monotonic
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
 import pychromecast
@@ -31,6 +31,9 @@ from .domain.values import (
     PlaybackScope,
 )
 from .models import Device, Observation
+
+if TYPE_CHECKING:
+    from .youtube_metadata import YouTubeMetadataProbe
 
 MEDIA = "urn:x-cast:com.google.cast.media"
 RECEIVER = "urn:x-cast:com.google.cast.receiver"
@@ -80,12 +83,19 @@ def select_device[T: HasUUID](devices: Iterable[T], device_id: str) -> T:
 class Observer(BaseController, ConnectionStatusListener):
     """Listener with single-use correlation for our receiver status polls."""
 
-    def __init__(self, namespace: str, events: Queue[Observation]) -> None:
+    def __init__(
+        self,
+        namespace: str,
+        events: Queue[Observation],
+        *,
+        metadata_probe: YouTubeMetadataProbe | None = None,
+    ) -> None:
         super().__init__(namespace, target_platform=namespace == RECEIVER)
         self.events = events
         self._status_lock = Lock()
         self._status_request: dict[str, object] | None = None
         self._status_deadline = 0.0
+        self._metadata_probe = metadata_probe
 
     def request_status(self, receiver: ReceiverController, deadline: float) -> None:
         """Poll receiver status, superseding any earlier unanswered request.
@@ -158,6 +168,9 @@ class Observer(BaseController, ConnectionStatusListener):
     def receive_message(self, _message: object, _data: object) -> bool:
         with self._status_lock:
             received_at = monotonic()
+            observed_at = now()
+            if self._metadata_probe is not None:
+                self._metadata_probe.receive(_data, observed_at=observed_at, monotonic=received_at)
             request_id = self._matching_request_id(_data, received_at)
             value: Observation | None = normalize_message(
                 _data, receiver_status_request_id=request_id
@@ -174,17 +187,23 @@ class Observer(BaseController, ConnectionStatusListener):
                 }
             # Ownership transfer and retirement share the lock: no old poll can
             # enqueue a newly timestamped idle result after its window closes.
-            self.events.put({"observed_at": now(), "monotonic": received_at, **value})
+            self.events.put({"observed_at": observed_at, "monotonic": received_at, **value})
             return True
 
 
 class Connection:
-    def __init__(self, info: CastInfo, zconf: Zeroconf) -> None:
+    def __init__(
+        self,
+        info: CastInfo,
+        zconf: Zeroconf,
+        *,
+        metadata_probe: YouTubeMetadataProbe | None = None,
+    ) -> None:
         self.events: Queue[Observation] = Queue()
         self.cast = pychromecast.get_chromecast_from_cast_info(
             info, zconf, tries=2, retry_wait=1, timeout=8
         )
-        self.cast.register_handler(Observer(MEDIA, self.events))
+        self.cast.register_handler(Observer(MEDIA, self.events, metadata_probe=metadata_probe))
         self.receiver_observer = Observer(RECEIVER, self.events)
         self.cast.register_handler(self.receiver_observer)
         self.cast.register_connection_listener(self.receiver_observer)
@@ -301,10 +320,19 @@ class Connection:
 
 
 @contextmanager
-def connect(device_id: str, discovery_seconds: float = 12) -> Iterator[tuple[Connection, Device]]:
+def connect(
+    device_id: str,
+    discovery_seconds: float = 12,
+    *,
+    metadata_probe: YouTubeMetadataProbe | None = None,
+) -> Iterator[tuple[Connection, Device]]:
     with discovery(discovery_seconds) as (browser, zconf):
         info = select_device(list(browser.devices.values()), device_id)
-        connection = Connection(info, zconf)
+        connection = (
+            Connection(info, zconf)
+            if metadata_probe is None
+            else Connection(info, zconf, metadata_probe=metadata_probe)
+        )
         try:
             connection.cast.wait(timeout=15)
             yield connection, device_dict(info)
