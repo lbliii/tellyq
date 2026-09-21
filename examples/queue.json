@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "device_id": null,
+  "items": [
+    {
+      "id": "autumn-fantasy",
+      "service": "youtube",
+      "content_id": "FozIp7Va7dY",
+      "title": "Bob Ross — Autumn Fantasy (Season 20 Episode 7)",
+      "url": "https://www.youtube.com/watch?v=FozIp7Va7dY",
+      "state": "queued"
+    }
+  ]
+}
