@@ -5,8 +5,10 @@ validated storage, Cast normalization, application integration and stop-verifica
 fix are merged. Actual `main` at `71a3c39` passed 351 offline tests, packaging/install
 checks, macOS/Linux CI and the bounded live regression. **M1 passed at `71a3c39`.**
 Unknown ad state remains explicit. M2's first batch is merged at `7a08929`; its
-487-test offline checkpoint passed. The live M2a session remains blocked on
-pause/resume and sufficient completion evidence. See the [M1 acceptance
+487-test offline checkpoint passed. Repairs merged at `e4b2a91`, which passed 531
+tests and a live pause/resume/cleanup diagnostic. The user confirmed visible pause.
+Two scoped metadata runs identified a YouTube-specific state candidate; M2a remains
+blocked on its interpretation and sufficient completion evidence. See the [M1 acceptance
 record](M1-ACCEPTANCE.md) and [M2a checkpoint](M2A-CHECKPOINT.md) for commit-specific
 results and remaining gates.
 
@@ -26,7 +28,7 @@ are proven on the actual device. A graphical interface is optional.
 | --- | --- | --- | --- |
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
-| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: first batch merged; M2a live gates blocked; repair batch underway |
+| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: controls passed; M2a completion requires a justified metadata route; automatic advancement is not implemented |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | M2 |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
 | M5 | One subscription service integrated | Two exact titles, three start/status/stop runs, and two cross-service handoffs pass the supported autonomy level | M2 + M4 |
@@ -87,9 +89,13 @@ the lifecycle evidence gate, and the subsequent runner/queue work. M2 starts fro
 The first batch merged at `7a08929` and passed the offline checkpoint. Three live
 requested-title runs produced terminal candidates, but pause/resume was not
 verified and unknown ads/missing terminal identity kept completion unconfirmed.
-Subsequent content reused a media-session ID. The [repair acceptance
-record](M2A-CHECKPOINT.md) defines controls, diagnostic/replay and repeat-live work
-before the persistent runner is built.
+Subsequent content reused a media-session ID. Repairs merged at `e4b2a91` and a
+fresh live diagnostic passed pause/resume and cleanup; the user confirmed pause.
+Duration is already available. The [metadata investigation](YOUTUBE-METADATA.md)
+identified a numeric provider state and first-party source evidence for separate
+ad states. The next step is source-qualified interpretation and content attribution,
+followed by full completion acceptance. The [acceptance record](M2A-CHECKPOINT.md)
+preserves earlier failures and the completion gate before the runner is built.
 
 Split into two small deliverables.
 
@@ -219,9 +225,10 @@ separate compatibility lane, not a prerequisite for the useful release.
 
 ## Immediate next work
 
-Repair M2a's control-boundary defect, expose safe rejection provenance, and retain
-the protocol diagnostics needed to investigate missing completion evidence. Review
-the captured same-session content replacement without assuming an unknown ad is
-inactive. After the independent repair PRs merge, repeat the explicitly requested
-live checkpoint. The persistent runner and automatic advancement follow only once
-M2a's completion decision and pause/resume gates are supported by actual evidence.
+Review a finite YouTube-specific interpretation of the observed numeric state
+field, backed by the pinned first-party source. Combine it with ordered content
+history and explicit invalidation on replacement, gaps and reconnects. Keep unknown
+codes and unvalidated ad behavior explicit. The schema and numeric diagnostics
+have identified the next implementation target; repeating them is unnecessary.
+The persistent runner and automatic advancement follow only once the proposed
+completion decision has passed review, offline tests and full live acceptance.

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add opt-in YouTube metadata diagnostics with bounded field types/counts and a
+  separate private schema capture. A reviewed numeric `customData.playerState`
+  field remains diagnostic only; ordinary reports and completion policy are unchanged.
+- Record two scoped metadata runs and pinned first-party YouTube source evidence.
+  They identify a provider-state candidate for completion work; ad-specific codes
+  remain unobserved and automatic advancement stays disabled.
+- Record the repaired live diagnostic on `e4b2a91`: 531 offline tests, verified
+  pause/resume and cleanup stop, plus user-confirmed visible pause. Completion
+  remains unverified. Document available duration, incremental Cast status,
+  provider custom-data limitations and the bounded next metadata investigation.
 - Record the merged M2 foundation checkpoint at `7a08929`: 487 offline tests and
   packaging checks pass; three live requested-title ending candidates remain
   unconfirmed, pause/resume fails acceptance, and subsequent content reuses a

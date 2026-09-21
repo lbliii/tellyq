@@ -37,10 +37,16 @@ strict receiver playback proof; see the
 M2's first batch is merged at `7a08929`: continuous lifecycle capture/replay,
 guarded pause/resume commands and the SQLite queue/journal foundation. Its merged
 checkpoint passed 487 automated tests and packaging checks. Three live runs across
-two titles produced ending candidates, but pause/resume was not verified and the
-completion evidence remained insufficient. The [M2a checkpoint and repair
-plan](docs/M2A-CHECKPOINT.md) records the failures and next acceptance gates.
-Automatic queue advancement remains unimplemented.
+two titles produced ending candidates, but initially failed pause/resume and
+completion acceptance. The repairs merged at `e4b2a91`, which passed 531 tests.
+The repaired live diagnostic verified pause/resume and cleanup stop; the user also
+confirmed visible pause. Completion remains unverified. Two focused metadata runs
+identified a YouTube-specific numeric state field, with first-party source evidence
+for separate ad states. Duration was already available. The
+[metadata investigation](docs/YOUTUBE-METADATA.md) defines the next interpretation
+and content-correlation work. The [M2a checkpoint](docs/M2A-CHECKPOINT.md)
+preserves every attempt and the remaining gates. Automatic queue advancement
+remains unimplemented.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
 

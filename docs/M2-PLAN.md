@@ -6,8 +6,11 @@ regression baseline. M2 adds a reliable unattended YouTube queue, in two stages.
 
 The first batch is merged at `7a08929`. Its merged-main offline checks passed;
 the supervised M2a checkpoint found terminal candidates but did not verify
-pause/resume or reliable completion. See the [checkpoint and repair acceptance
-record](M2A-CHECKPOINT.md). M2a remains blocked while the repair batch below runs.
+pause/resume or reliable completion. Repairs merged at `e4b2a91`; 531 offline
+tests and a live pause/resume/cleanup diagnostic passed. The user confirmed visible
+pause. Two focused metadata runs then identified a provider-state candidate.
+Completion remains blocked pending its interpretation and acceptance below.
+See the [checkpoint and repair acceptance record](M2A-CHECKPOINT.md).
 
 ## First batch: prepare lifecycle experiments and durable state
 
@@ -88,6 +91,41 @@ combined checkout passed `poe ci`: **531 tests**, **92.9% coverage**, lint/types
 source/wheel builds and isolated installation. The [checkpoint record](M2A-CHECKPOINT.md)
 contains the review findings, CI links and remaining live gates.
 
+## M2a metadata investigation after control acceptance
+
+The repaired live run on `e4b2a91` passed pause/resume and cleanup. It received the
+requested title's duration during playback, but FINISHED omitted media identity
+and ad state remained unknown. Provider custom data was object-shaped; the shape
+capture did not retain whether it was empty or what useful fields it contained.
+
+| Stream | Ownership | Bounded deliverable |
+| --- | --- | --- |
+| Metadata capture | Pure provider diagnostic projection, opt-in passive collection, typed records and privacy/offline tests | Distinguish empty/nonempty containers and reviewed source paths without exporting arbitrary private payloads; leave playback policy unchanged. |
+| Metadata research | Primary Cast/YouTube references, pinned library inspection, checkpoint/roadmap | Explain duration and incremental updates, separate standard semantics from YouTube observations, and record a concrete capability decision. |
+| Coordination | Tool review, scoped schema run and focused numeric follow-up, exact combined validation | Start observer before each launch, preserve operator chronology, inspect terminal/subsequent state, and publish independent PRs against `main`. |
+
+Each branch starts from `e4b2a91`. The coordinator alone owns live hardware commands.
+The [research note](YOUTUBE-METADATA.md) distinguishes media-session identity alone
+from ordered content history and explains why literal inactive-ad booleans are a
+TellyQ policy choice rather than a universal protocol requirement. Any alternative
+source-specific rule needs a justified contract and separate acceptance; this
+batch does not relax the production gate.
+
+Two scoped runs supplied a plausible path. The schema run identified numeric
+`status.customData.playerState`; first-party YouTube source reads this field and
+distinguishes ad-specific codes. A narrow numeric follow-up observed ordinary
+startup/buffering/playing codes and zero on FINISHED, then code 5 with same-title
+BUFFERING. It observed no ad-specific codes. Tooling at `3a60058`
+([PR #18](https://github.com/lbliii/tellyq/pull/18)) passed 566 tests, 93.3% coverage,
+lint/types/build/install and macOS/Linux CI. The live controller stayed on `e4b2a91`.
+
+The next work is a finite, source-qualified YouTube state interpretation and
+ordered content correlation, with explicit unknowns and offline regression cases
+before changing policy. Then run the full acceptance set. Another schema-only
+capture or Lounge probe is not the immediate next step. The research note retains
+Lounge as a bounded fallback if the candidate proves insufficient. No timer, UI,
+custom receiver, MCP layer or new hardware is introduced to bypass the gate.
+
 ## M2b: one persistent playback owner
 
 The storage foundation can proceed in parallel with M2a because it executes no
@@ -147,7 +185,7 @@ handoff or stop-latency acceptance run occurred in this batch.
 | --- | --- | --- |
 | Baseline | M1 merged and accepted | Passed: code `71a3c39`, docs merged at `8a480ea` |
 | First batch | Independent PR checks plus exact combined lint/types/tests/build/install | PRs #11–14 merged; `7a08929` passed 487 tests, 92.8% coverage, lint/types/build/install |
-| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Attempted on `7a08929`; blocked on verified pause/resume and sufficient completion evidence; see checkpoint record |
+| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Controls passed on `e4b2a91`, including visible pause; two metadata runs identified a provider-state candidate, pending interpretation and completion acceptance |
 | Runner | One owner, responsive mailbox, durable intent, explicit recovery and cancellation | Subsequent batch |
 | Queue acceptance | Three three-item runs, six correct handoffs, no early or duplicate advancement | Not run |
 | Response bounds | Healthy-LAN stop accepted locally within one second; observed outcome within ten seconds or an explicit timeout | Not measured |
