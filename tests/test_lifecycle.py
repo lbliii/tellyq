@@ -402,15 +402,44 @@ def private_records():
     return sink.records
 
 
-def test_sanitizer_replaces_ids_consistently_allowlists_scalars_and_preserves_unknown():
+@pytest.mark.parametrize("year_digits_in_pseudonym", [False, True])
+def test_sanitizer_replaces_ids_consistently_allowlists_scalars_and_preserves_unknown(
+    monkeypatch, year_digits_in_pseudonym
+):
+    if year_digits_in_pseudonym:
+        # Deterministic synthetic keys: playback:99 maps to 76247582520264.
+        # A year-shaped substring in a random identifier is not a timestamp leak.
+        keys = iter((182, 183))
+        monkeypatch.setattr("tellyq.lifecycle.token_bytes", lambda size: next(keys).to_bytes(size))
     records = private_records()
     sanitizer = CaptureSanitizer()
     safe = [sanitizer.record(record) for record in records]
     encoded = json.dumps(safe, allow_nan=False)
     assert "SECRET" not in encoded and "https://" not in encoded
-    assert "private-device" not in encoded and "2026" not in encoded and "video-id" not in encoded
+    assert "private-device" not in encoded and "video-id" not in encoded
+    timestamp_pairs = [
+        (original["recorded_at"], exported["recorded_at"])
+        for original, exported in zip(records, safe, strict=True)
+    ]
+    timestamp_pairs += [
+        (original["observed_at"], exported["observed_at"])
+        for raw_record, safe_record in zip(records, safe, strict=True)
+        for original, exported in zip(
+            raw_record.get("observations", []), safe_record.get("observations", []), strict=True
+        )
+        if "observed_at" in original
+    ]
+    origin = datetime.fromisoformat(records[0]["recorded_at"])
+    private_timestamps = {original for original, _ in timestamp_pairs}
+    for original, shifted in timestamp_pairs:
+        assert shifted not in private_timestamps
+        assert datetime.fromisoformat(shifted) == datetime(2000, 1, 1, tzinfo=UTC) + (
+            datetime.fromisoformat(original) - origin
+        )
     assert all(record["provenance"] == "sanitized-live" for record in safe)
     event = safe[1]["observations"][0]
+    if year_digits_in_pseudonym:
+        assert event["media_session_id"] == 76247582520264
     assert event["content_id"] == safe[0]["requested_content_id"]
     assert event["ad_break"] is None and event["empty_status"] is True
     assert event["idle_reason"] == "INTERRUPTED"
