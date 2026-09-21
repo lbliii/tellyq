@@ -75,8 +75,11 @@ manufacture completion.
 The implementation is exercised offline across the task, application, SQLite,
 observation and service boundaries. The [merged hardware checkpoint](NATIVE-RUNNER-CHECKPOINT.md)
 passed one complete three-item sequence, active stop with a staged successor and
-bounded process-loss recovery. A second sequence held after its middle item, so
-the [M2 plan](M2-NATIVE-QUEUE-PLAN.md#acceptance-gates) still requires the three
-successful three-item sessions and six verified handoffs. Missing visual
-confirmation, unproven clear semantics, remote autoplay and transport races remain
-explicit limits.
+bounded process-loss recovery. A second sequence held after its middle item.
+Two subsequent [instrumented comparisons](ENQUEUE-INVESTIGATION.md) completed,
+bringing the aggregate to three completed sessions across four attempts. The
+[M2 closeout](M2-ACCEPTANCE.md) accepts the delivered functionality with the
+intermittent stall retained as [issue #42](https://github.com/lbliii/tellyq/issues/42).
+Missing visual confirmation in some runs, unproven clear semantics, remote autoplay
+and transport races remain explicit limits. M3 may expose the existing controls
+and outcomes; it must preserve these limits.

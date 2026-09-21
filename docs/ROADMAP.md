@@ -1,5 +1,11 @@
 # TellyQ roadmap
 
+**M2 is closed with a known reliability limitation as of 2026-09-21.** The
+[closeout record](M2-ACCEPTANCE.md) counts three completed three-item sessions
+across four attempts and preserves the stalled attempt in
+[issue #42](https://github.com/lbliii/tellyq/issues/42). M3 is ready to begin.
+Further provider diagnostics are bounded bug work; they do not add M2 requirements.
+
 Updated 2026-09-21. M0's hardware proof is verified. M1's domain contracts,
 validated storage, Cast normalization, application integration and stop-verification
 fix are merged. Actual `main` at `71a3c39` passed 351 offline tests, packaging/install
@@ -31,8 +37,8 @@ are proven on the actual device. A graphical interface is optional.
 | --- | --- | --- | --- |
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
-| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: M2a lifecycle gate passed; M2b components merged at `9715b58`; foreground composition has synthetic handoff tests, with live acceptance pending |
-| M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | M2 |
+| M2 | Reliable unattended YouTube queue | Three completed three-item sessions out of four attempts; controls, durable history and bounded recovery verified; earlier failures retained | **Closed with known reliability limitation**: [enqueue stall #42](https://github.com/lbliii/tellyq/issues/42) remains open; dependable unattended use is not yet established |
+| M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | **Ready to begin** after qualified M2 closeout; not implemented |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
 | M5 | One subscription service integrated | Two exact titles, three start/status/stop runs, and two cross-service handoffs pass the supported autonomy level | M2 + M4 |
 | M6 | Mood becomes a useful evening of TV | Ten planning scenarios satisfy constraints; user accepts three real lineups; every item resolves to a known provider ID and supported control route | M3; YouTube can ship before M5 |
@@ -85,6 +91,10 @@ Acceptance:
 
 ## M2 — Finish a program, then advance exactly once
 
+**Closed with the known enqueue-stall limitation.** The [aggregate acceptance
+record](M2-ACCEPTANCE.md) is authoritative. The original scope and execution
+history below are retained; closing M2 does not certify issue #42 as fixed.
+
 The [M2 execution plan](M2-PLAN.md) defines the first independent agent batch,
 the lifecycle evidence gate, and the subsequent runner/queue work. M2 starts from
 `main` at `8a480ea`, after the M1 acceptance record merged.
@@ -99,8 +109,8 @@ identified a numeric provider state and first-party source evidence for separate
 ad states. The reviewed completion candidate then passed the three-run/two-title
 lifecycle acceptance, including pause/resume, one positive ad code and replacement
 ownership refusal. The [acceptance record](M2A-CHECKPOINT.md) preserves earlier
-failures and specific untested ad/recovery behavior. M2b is the next implementation
-stage, starting with the [independent component swarm](M2B-PLAN.md).
+failures and specific untested ad/recovery behavior. M2b followed with the
+[independent component swarm](M2B-PLAN.md) and native foreground integration.
 
 Split into two small deliverables.
 
@@ -119,8 +129,9 @@ from finished. Handle provider autoplay without competing with it.
 Two isolated native YouTube `play_next` experiments have now verified A's natural
 completion, intervening ad-state observations, and exact B playback without an
 app exit/relaunch. A separate clear-plus-exit cancellation check kept B from
-starting during 125 seconds of observation. These establish a candidate route,
-not foreground-runner acceptance. The user approved one already authorized
+starting during 125 seconds of observation. Those prototype experiments established
+a candidate route; subsequent composed runner checks are counted in the closeout.
+The user approved one already authorized
 successor continuing if TellyQ disconnects, with reconciliation on reconnect.
 The [native queue integration plan](M2-NATIVE-QUEUE-PLAN.md) records that behavior,
 the optional capability, durable reservation, and recovery work.

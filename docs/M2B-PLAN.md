@@ -1,5 +1,10 @@
 # M2b: persistent ownership and durable queue execution
 
+This is the historical execution plan. M2a and M2b are now delivered under the
+[qualified M2 closeout](M2-ACCEPTANCE.md), with the enqueue stall retained as an
+open reliability defect. Stage-specific pending gates below describe their time
+in the implementation history; they do not reopen the milestone.
+
 Started 2026-09-21 from merged `main` at `6aec896`. PRs #20–22 are merged.
 This tree is identical to the final reviewed M2a integration tree `a82cb17`, and
 its fresh Python 3.14 `poe check` passes 666 tests, Ruff, formatting and ty.
@@ -223,14 +228,14 @@ retrying start adds no effect, shutdown closes resources, and reopening the queu
 holds without replay. Internet sockets/DNS remain forbidden. Both component PRs
 also pass their GitHub Python 3.14 macOS/Linux workflows.
 
-**M2b live acceptance remains pending.** No hardware ran during this wave. The
+**M2b live acceptance was pending at this stage.** No hardware ran during this wave. The
 actual M2a FINISHED → same-title code-5 BUFFERING/position-zero sequence is a
 regression that must HOLD, not a supported handoff. A bounded reinspection of the
 pinned first-party source found no field-specific meaning for this sequence;
 IFrame API numeric values were not substituted. The next supervised checkpoint
-tests foreground ownership/status/stop/shutdown first, then attempts supported
-handoffs. Three three-item live sessions and six handoffs are still required to
-close the milestone.
+was planned to test foreground ownership/status/stop/shutdown, then supported
+handoffs. Three three-item sessions and six handoffs were still outstanding at
+that stage; current aggregate evidence is recorded in the closeout.
 
 ## Closing workstreams
 

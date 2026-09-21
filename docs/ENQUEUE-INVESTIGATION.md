@@ -3,8 +3,10 @@
 Both bounded comparisons passed: A → B → A and A → B → C each produced three
 verified natural endings and two automatic handoffs. This establishes that both
 repeated and distinct third videos can work. It does **not** reproduce or fix the
-earlier intermittent stall. **M2 remains open**; these two instrumented comparisons
-do not replace the full acceptance batch or erase its failed attempt.
+earlier intermittent stall. M2 was initially left open at this checkpoint. The
+later user-approved [M2 closeout](M2-ACCEPTANCE.md) counts these successes with the
+earlier completed session, while preserving all four attempts and the open
+[stall defect #42](https://github.com/lbliii/tellyq/issues/42).
 
 | Trial | Observed outcome | Final verified stop | Driver / owner exit |
 | --- | --- | --- | --- |
@@ -107,6 +109,9 @@ documented delivery guarantee. Reading their code does not establish compatibili
 with this receiver. No dependency or transport behavior changes were made here.
 
 ## Next discriminating experiment
+
+This is bounded follow-up for issue #42, not an added M2 exit requirement or a
+prerequisite to M3. It has not been performed as part of the milestone closeout.
 
 Capture the provider's post-insertion event stream alongside Cast evidence within
 one foreground owner. First evaluate the existing clients above for bounded

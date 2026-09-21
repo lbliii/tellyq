@@ -2,9 +2,11 @@
 
 The M2 closing diagnostics expose the existing automatic release and successor
 checks. **They do not relax the handoff policy or claim a live handoff fix.** The
-live M2b gate remains open. No discovery, playback, or receiver control was
-performed for this change. A fresh supervised checkpoint must identify the exact
-current hold before any evidence-supported repair or acceptance claim.
+live M2b gate was still open when this change landed, and no discovery, playback,
+or receiver control was performed for it. Subsequent native integration and live
+evidence are summarized in the [qualified M2 closeout](M2-ACCEPTANCE.md). Any new
+repair still needs evidence of the exact hold; this projection itself is not
+proof of a successful handoff.
 
 ## Cached status contract
 

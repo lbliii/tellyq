@@ -3,14 +3,17 @@
 The merged native runner at `28d043d` passed one complete A → B → A session,
 active cancellation with a successor staged, and process-loss recovery into the
 already approved B. A second full-session attempt stalled after B despite an
-acknowledged enqueue for the final A. **M2 remains open.** Three verified handoffs
+acknowledged enqueue for the final A. **M2 remained open at this checkpoint.** Three verified handoffs
 were observed across the two attempts; the required three successful three-item
 sessions and six handoffs were not achieved.
 
 The subsequent [enqueue investigation](ENQUEUE-INVESTIGATION.md) at `b0e32b1`
 passed a repeated and a distinct three-item comparison with response-only
 instrumentation. Those four additional handoffs did not reproduce or explain the
-failure below. The investigation preserves this failed attempt and M2 remains open.
+failure below. The later [M2 closeout](M2-ACCEPTANCE.md) counts three completed
+sessions across the combined four-attempt record and closes M2 with a known
+reliability limitation. This failed attempt remains tracked in
+[issue #42](https://github.com/lbliii/tellyq/issues/42).
 
 These supervised checks ran on 2026-09-21 with Python 3.14.0 and the locked
 PyChromecast 14.0.10/casttube 0.2.1 dependencies. Actual merged `main` passed all
