@@ -30,10 +30,13 @@ code. Empty, null or malformed break objects cannot qualify ordinary content.
 Missing break metadata **alone** remains unknown; inactive-ad interpretation comes
 from the finite, source-qualified ordinary-content state.
 
-The ordinary/ad distinction follows the reviewed implementation. No 108x code has
-yet been observed on this receiver, and code 2 has not yet been captured in the
-provider diagnostic. Synthetic coverage does not replace those live acceptance
-checks. Unknown codes, including observed -1 and 5, retain unknown meaning.
+The ordinary/ad distinction follows the reviewed implementation. The initial
+provider diagnostic did not capture code 2 or any 108x code. The subsequent
+completion checkpoint captured code 2 during a software-verified and user-visible
+pause, followed by a verified and visible resume. No 108x code has been observed
+in these runs; synthetic ad coverage does not replace live validation. Unknown
+codes, including observed -1 and 5, retain unknown meaning. See the
+[checkpoint ledger](M2A-CHECKPOINT.md) for commit-specific results.
 
 ## Identity and ordered history
 
