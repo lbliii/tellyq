@@ -110,7 +110,14 @@ class QueueStore(Protocol):
 
     def mark_dispatched(
         self, queue_id: str, command_id: str, *, at: datetime, expected_revision: int
-    ) -> QueueSnapshot: ...
+    ) -> QueueSnapshot:
+        """Atomically claim PENDING once; repeated DISPATCHED must fail, not succeed.
+
+        Revision and generation must still match, and canceled starts must fail.
+        The returned committed claim permits one exclusive owner's invocation;
+        it is not a transferable remote-delivery guarantee.
+        """
+        ...
 
     def record_outcome(
         self,
