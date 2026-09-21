@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Record the merged M2 foundation checkpoint at `7a08929`: 487 offline tests and
+  packaging checks pass; three live requested-title ending candidates remain
+  unconfirmed, pause/resume fails acceptance, and subsequent content reuses a
+  media-session ID. Document the independent repair batch and repeat-live gates.
+- Document the merged continuous lifecycle capture/replay, guarded pause/resume
+  commands and SQLite queue/journal foundation. These do not enable unattended
+  advancement; SQLite is not yet integrated into the playback runner.
+- Describe M2a control repair: reconcile strictly pre-boundary startup events
+  using fresh ownership, and expose fixed stage/reason diagnostics for refusals,
+  receiver responses and unknown outcomes. Start/stop receipt shapes are unchanged.
+- Describe M2a completion diagnostics: preserve the shapes of named wire fields,
+  add offline capture inspection, and retain a reviewed partial live replay fixture
+  for different content reusing a media-session ID. Unknown ads remain unknown;
+  the completion gate is unchanged.
+
 M1's foundations and second-wave code are merged. Actual `main` at `71a3c39`
 passed 351 tests, packaging/install checks, macOS/Linux CI and the bounded live
 regression. [M1 is accepted at that commit](docs/M1-ACCEPTANCE.md); unknown-ad

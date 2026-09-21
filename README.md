@@ -34,6 +34,14 @@ persisted `stopped` state. **M1 passed at `71a3c39`.** Unknown ad state still li
 strict receiver playback proof; see the
 [M1 acceptance record](docs/M1-ACCEPTANCE.md) for the separate evidence and limits.
 
+M2's first batch is merged at `7a08929`: continuous lifecycle capture/replay,
+guarded pause/resume commands and the SQLite queue/journal foundation. Its merged
+checkpoint passed 487 automated tests and packaging checks. Three live runs across
+two titles produced ending candidates, but pause/resume was not verified and the
+completion evidence remained insufficient. The [M2a checkpoint and repair
+plan](docs/M2A-CHECKPOINT.md) records the failures and next acceptance gates.
+Automatic queue advancement remains unimplemented.
+
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
 
 For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and
@@ -104,8 +112,9 @@ control the TV. See [contributor guidance](CONTRIBUTING.md) for coverage, option
 commit hooks, dependency changes and the macOS/Linux CI checks. For a sandbox-local
 uv cache, prefix uv commands with `UV_CACHE_DIR=runtime/uv-cache`.
 
-See [implementation work and verification](docs/IMPLEMENTATION.md). No automatic
-queue advancement or full-episode completion test has been performed.
+See [implementation work and verification](docs/IMPLEMENTATION.md). Natural-ending
+experiments have been performed, but completion acceptance remains blocked. No
+automatic queue advancement test has been performed.
 
 ## Longer-term direction
 

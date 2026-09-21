@@ -4,6 +4,11 @@ Started 2026-09-21 from `main` at `8a480ea`, after the M1 acceptance record merg
 M1 passed on code commit `71a3c39`; its verified start/status/stop behavior is the
 regression baseline. M2 adds a reliable unattended YouTube queue, in two stages.
 
+The first batch is merged at `7a08929`. Its merged-main offline checks passed;
+the supervised M2a checkpoint found terminal candidates but did not verify
+pause/resume or reliable completion. See the [checkpoint and repair acceptance
+record](M2A-CHECKPOINT.md). M2a remains blocked while the repair batch below runs.
+
 ## First batch: prepare lifecycle experiments and durable state
 
 Three agents work in separate worktrees, each branched from `8a480ea`. Each PR
@@ -55,6 +60,33 @@ that boundary if the first capture is inconclusive.
 M2a passes only when the three runs and the completion decision are supported by
 actual evidence. If completion remains unobservable, hold the queue and report
 the specific limitation. Do not build a timer-based substitute.
+
+## M2a repair batch after the first live checkpoint
+
+The [checkpoint record](M2A-CHECKPOINT.md) preserves the three requested-title
+runs, refused/rejected pause attempts, unknown ad state, missing terminal content
+identity and subsequent content reusing a media-session ID. The control and
+completion evidence streams below each branch directly from `7a08929`; each must
+pass independently and target `main`, with a separate documentation PR.
+
+| Stream | Branch / ownership | Deliverable |
+| --- | --- | --- |
+| C3: Control repair | [PR #15](https://github.com/lbliii/tellyq/pull/15), `codex/m2a-control-repair`; application/control paths, control contracts/reports, control tests and notes | Correct pre-boundary reset handling without weakening current-reset/ownership guards; expose safe typed rejection provenance; cover live-shaped failures offline. |
+| L6: Completion evidence | [PR #16](https://github.com/lbliii/tellyq/pull/16), `codex/m2a-completion-evidence`; normalization diagnostics, lifecycle capture/replay, reviewed fixtures and notes | Preserve which relevant protocol fields were absent or malformed, cover same-media-ID content replacement, and document the remaining completion blocker or justified signal. |
+| P2: Coordination | `codex/m2a-checkpoint-plan`; checkpoint ledger, roadmap, changelog and shared plan | Cross-review both code streams, test the exact combined tree and both merge orders, record final PR/CI evidence, and prepare the repeat live checkpoint. |
+
+Shared model/adapter edits are coordinated by field/method ownership. No branch
+depends on another repair branch. Normal checks remain offline. After merge,
+run one short diagnostic with the new fields and control provenance before the
+full live acceptance set. If the protocol still offers no supported completion
+signal, record that limitation instead of repeating identical inconclusive runs.
+No code-only result closes M2a or authorizes automatic advancement.
+
+The final controls (`0f959b3`) and completion (`9071eb0`) heads passed independent
+checks and macOS/Linux CI. Both merge orders produce the same tree. The exact
+combined checkout passed `poe ci`: **531 tests**, **92.9% coverage**, lint/types,
+source/wheel builds and isolated installation. The [checkpoint record](M2A-CHECKPOINT.md)
+contains the review findings, CI links and remaining live gates.
 
 ## M2b: one persistent playback owner
 
@@ -114,8 +146,8 @@ handoff or stop-latency acceptance run occurred in this batch.
 | Gate | Required result | Current status |
 | --- | --- | --- |
 | Baseline | M1 merged and accepted | Passed: code `71a3c39`, docs merged at `8a480ea` |
-| First batch | Independent PR checks plus exact combined lint/types/tests/build/install | Reviewed and published as PRs #11–14; local integration passed as recorded above |
-| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Not run |
+| First batch | Independent PR checks plus exact combined lint/types/tests/build/install | PRs #11–14 merged; `7a08929` passed 487 tests, 92.8% coverage, lint/types/build/install |
+| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Attempted on `7a08929`; blocked on verified pause/resume and sufficient completion evidence; see checkpoint record |
 | Runner | One owner, responsive mailbox, durable intent, explicit recovery and cancellation | Subsequent batch |
 | Queue acceptance | Three three-item runs, six correct handoffs, no early or duplicate advancement | Not run |
 | Response bounds | Healthy-LAN stop accepted locally within one second; observed outcome within ten seconds or an explicit timeout | Not measured |
