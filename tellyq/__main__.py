@@ -25,14 +25,23 @@ def main(argv: list[str] | None = None) -> int:
                 "--seconds", type=int, default=30, choices=range(5, 121), metavar="5..120"
             )
     args = parser.parse_args(argv)
-    RUNTIME.mkdir(exist_ok=True)
-    logging.basicConfig(filename=RUNTIME / "controller.log", level=logging.WARNING)
     try:
+        RUNTIME.mkdir(exist_ok=True)
+        logging.basicConfig(filename=RUNTIME / "controller.log", level=logging.WARNING)
         report, code = execute(
             args.command, RUNTIME, getattr(args, "device", None), getattr(args, "seconds", 30)
         )
     except Exception as exc:
-        report, code = {"error": {"type": type(exc).__name__, "message": str(exc)}}, 1
+        report, code = (
+            {
+                "schema_version": 1,
+                "error": {
+                    "type": type(exc).__name__,
+                    "message": "The command could not complete; inspect local diagnostics.",
+                },
+            },
+            1,
+        )
     print(json.dumps(report, indent=2), flush=True)
     return code
 

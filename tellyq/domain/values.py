@@ -76,6 +76,7 @@ class PlaybackScope:
     session_id: str
     connection_generation: str
     started_monotonic: float
+    application_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.session_id or not self.connection_generation:
@@ -147,9 +148,12 @@ class CommandReceipt:
     outcome: CommandOutcome
     recorded_at: datetime
     error: PlaybackError | None = None
+    requested_at: datetime | None = None
 
     def __post_init__(self) -> None:
         _require_aware(self.recorded_at)
+        if self.requested_at is not None:
+            _require_aware(self.requested_at)
 
 
 class PlayerState(StrEnum):
@@ -183,6 +187,10 @@ class PlaybackObservation:
     ad_active: bool | None = None
     idle_reason: IdleReason | None = None
     source: str = "receiver"
+    application_id: str | None = None
+    playback_id: str | None = None
+    session_active: bool | None = None
+    connection_reset: bool = False
 
     def __post_init__(self) -> None:
         _require_aware(self.observed_at)
@@ -202,6 +210,12 @@ class PlaybackObservation:
                     raise ValueError(f"{name} must be non-negative")
         if self.ad_active is not None and not isinstance(self.ad_active, bool):
             raise ValueError("ad state must be true, false or unknown")
+        if self.session_active is False and (
+            self.session_id is not None
+            or self.application_id is not None
+            or self.content is not None
+        ):
+            raise ValueError("an explicit session exit cannot also identify an active session")
         if self.state in (PlayerState.ENDED, PlayerState.STOPPED):
             raise ValueError("ended and stopped are policy conclusions, not raw observations")
 
@@ -256,6 +270,9 @@ class SessionSnapshot:
     progress_anchor: PlaybackObservation | None = None
     has_confirmed_playback: bool = False
     stop_requested: bool = False
+    stop_boundary: float | None = None
+    last_sequence: int = -1
+    last_monotonic: float | None = None
     ownership_lost: bool = False
     display: DisplayEvidence | None = None
 

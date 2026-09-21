@@ -1,116 +1,172 @@
-"""Reusable one-program operations, independent of CLI argument parsing."""
+"""CLI composition and compatible JSON reporting around the injected application."""
 
+import logging
 import sys
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from dataclasses import fields
+from itertools import pairwise
 from pathlib import Path
-from time import monotonic
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
-from .cast import VIDEO_ID, Connection, connect, device_dict, discovery, now
-from .evidence import playback_evidence, video_id
-from .models import CommandReceipt, Evidence, Observation, Report
+from .application import PlaybackApplication, PlaybackResult
+from .clock import SystemClock
+from .domain.ports import Clock, PlaybackBackend, SessionStore
+from .domain.values import (
+    CommandOutcome,
+    CommandReceipt,
+    ContentRef,
+    PlaybackRequest,
+    PlaybackScope,
+    PlaybackTarget,
+    PlayerState,
+    SessionSnapshot,
+)
+from .models import CommandReceipt as WireReceipt
+from .models import Device, Observation, Report
+from .programs import DEFAULT_CONTENT_ID, DEFAULT_ITEM_ID, DEFAULT_SERVICE, DEFAULT_TITLE
+from .session_store import JsonSessionStore
 from .state import command_lock, load_queue, make_queue, read, save
 
-
-def current_state(events: list[Observation], evidence: Evidence) -> str:
-    """Report current receiver state conservatively; never infer completion from time."""
-    receivers = [e for e in events if e["kind"] == "receiver"]
-    if receivers and receivers[-1].get("app_name") != "YouTube":
-        return "unconfirmed"
-    media = [e for e in events if e["kind"] == "media"]
-    if not media:
-        return "unconfirmed"
-    latest = media[-1]
-    if (
-        video_id(latest.get("content_id")) == VIDEO_ID
-        and latest.get("player_state") == "IDLE"
-        and latest.get("idle_reason") == "FINISHED"
-        and not latest.get("ad_break")
-    ):
-        return "finished"
-    if (
-        evidence["receiver_playback_confirmed"]
-        and latest.get("player_state") == "PLAYING"
-        and video_id(latest.get("content_id")) == VIDEO_ID
-        and not latest.get("ad_break")
-    ):
-        return "playing"
-    return "unconfirmed"
+BackendFactory = Callable[
+    [PlaybackTarget, Clock, float], AbstractContextManager[tuple[PlaybackBackend, Device]]
+]
 
 
-def start_playback(
-    connection: Connection,
-    device_id: str,
-    seconds: float,
-    runtime: Path,
-    report: Report,
-) -> None:
-    previous_receivers = [e for e in report["observations"] if e["kind"] == "receiver"]
-    previous_session = previous_receivers[-1].get("app_session_id") if previous_receivers else None
-    report["requested_content_id"] = VIDEO_ID
-    boundary = monotonic()
-    command: CommandReceipt = {"action": "play_video", "requested_at": now(), "returned": False}
-    report["commands"].append(command)
-    try:
-        connection.youtube.play_video(VIDEO_ID)
-        command["returned"] = True
-    finally:
-        report["observations"] += connection.observe(seconds)
-        events = [e for e in report["observations"] if e["monotonic"] >= boundary]
-        report["evidence"] = playback_evidence(events, VIDEO_ID)
-        report["state"] = current_state(events, report["evidence"])
-        receivers = [e for e in events if e["kind"] == "receiver"]
-        latest = receivers[-1] if receivers else {"kind": "receiver"}
-        if (
-            latest.get("app_name") == "YouTube"
-            and latest.get("app_session_id")
-            and (command["returned"] or latest["app_session_id"] != previous_session)
-        ):
-            save(
-                runtime / "session.json",
-                {
-                    "device_id": device_id,
-                    "content_id": VIDEO_ID,
-                    "app_id": latest["app_id"],
-                    "app_session_id": latest["app_session_id"],
-                },
-            )
+@runtime_checkable
+class WireObservations(Protocol):
+    @property
+    def raw_observations(self) -> list[Observation]: ...
 
 
-def stop_playback(connection: Connection, device_id: str, runtime: Path, report: Report) -> None:
-    session = read(runtime / "session.json")
-    receivers = [e for e in report["observations"] if e["kind"] == "receiver"]
-    latest = receivers[-1] if receivers else {"kind": "receiver"}
-    if (
-        not session
-        or session["device_id"] != device_id
-        or not session.get("app_session_id")
-        or latest.get("app_id") != session["app_id"]
-        or latest.get("app_session_id") != session["app_session_id"]
-    ):
-        raise ValueError(
-            "The saved YouTube session is no longer active; refusing to stop another session."
-        )
-    media = [e for e in report["observations"] if e["kind"] == "media" and e.get("content_id")]
-    if media and video_id(media[-1]["content_id"]) != session.get("content_id", VIDEO_ID):
-        raise ValueError("Different content is now playing; refusing to stop it.")
-    boundary = monotonic()
-    command: CommandReceipt = {"action": "quit_app", "requested_at": now(), "returned": False}
-    report["commands"].append(command)
-    try:
-        connection.cast.quit_app(timeout=10)
-        command["returned"] = True
-    finally:
-        report["observations"] += connection.observe(6)
-        after = [
-            e
-            for e in report["observations"]
-            if e["kind"] == "receiver" and e["monotonic"] >= boundary
+def _wire_receipt(receipt: CommandReceipt) -> WireReceipt:
+    return {
+        "action": "play_video" if receipt.action.value == "start" else "quit_app",
+        "requested_at": (receipt.requested_at or receipt.recorded_at).isoformat(),
+        "recorded_at": receipt.recorded_at.isoformat(),
+        "returned": receipt.outcome == CommandOutcome.ACCEPTED,
+        "outcome": receipt.outcome.value,
+    }
+
+
+def _observations(result: PlaybackResult) -> list[Observation]:
+    return [
+        {
+            "kind": "receiver" if event.session_active is not None else "media",
+            "observed_at": event.observed_at.isoformat(),
+            "monotonic": event.monotonic,
+            "content_id": event.content.content_id if event.content else None,
+            "title": event.content.title if event.content else None,
+            "player_state": event.state.value.upper(),
+            "position": event.position,
+            "duration": event.duration,
+            "ad_break": event.ad_active,
+            "idle_reason": event.idle_reason.value.upper() if event.idle_reason else None,
+            "app_id": event.application_id,
+            "app_session_id": event.session_id,
+            "playback_id": event.playback_id,
+            "sequence": event.sequence,
+            "connection_generation": event.connection_generation,
+            "source": event.source,
+        }
+        for event in result.observations
+    ]
+
+
+def _result_report(report: Report, result: PlaybackResult, clock: Clock) -> int:
+    snapshot = result.snapshot
+    report["observations"] = _observations(result)
+    report["state"] = "unconfirmed"
+    report["observed_state"] = snapshot.state.value if snapshot else "unknown"
+    report["evidence"] = {
+        "receiver_playback_confirmed": bool(
+            snapshot and snapshot.evidence.receiver_playback_confirmed
+        ),
+        "identity_observed": bool(snapshot and snapshot.evidence.identity_confirmed),
+        "playing_observed": bool(snapshot and snapshot.state == PlayerState.PLAYING),
+        "advancing_position_observed": False,
+        "natural_completion_confirmed": bool(
+            snapshot and snapshot.evidence.natural_completion_confirmed
+        ),
+        "reason": result.reason.value,
+        "visual_confirmation": None,
+    }
+    if snapshot is not None:
+        report["attempt_id"] = snapshot.scope.request.attempt_id
+        if snapshot.evidence.receiver_playback_confirmed and snapshot.state == PlayerState.PLAYING:
+            report["state"] = "playing"
+        elif snapshot.state == PlayerState.STOPPED:
+            report["state"] = "stopped"
+        elif snapshot.evidence.natural_completion_confirmed:
+            report["state"] = "finished"
+        # Position telemetry is distinct from ad-free playback verification.
+        recent = [
+            event
+            for event in result.observations
+            if event.target == snapshot.scope.request.target
+            and event.connection_generation == snapshot.scope.connection_generation
+            and event.session_id == snapshot.scope.session_id
+            and event.content == snapshot.scope.request.content
+            and event.state == PlayerState.PLAYING
+            and event.position is not None
+            and 0 <= clock.monotonic() - event.monotonic <= 5
         ]
-        report["stop_confirmed"] = bool(after and after[-1].get("app_id") != session["app_id"])
-        report["stop_verification_source"] = (
-            "receiver_app_exit" if report["stop_confirmed"] else None
+        report["evidence"]["advancing_position_observed"] = not snapshot.ownership_lost and any(
+            first.position is not None
+            and second.position is not None
+            and first.playback_id == second.playback_id
+            and second.sequence > first.sequence
+            and second.monotonic - first.monotonic >= 1
+            and second.position > first.position
+            for first, second in pairwise(recent)
         )
-        report["state"] = "stopped" if report["stop_confirmed"] else "unconfirmed"
+    receipt = result.receipt
+    if receipt is not None:
+        report["commands"] = [_wire_receipt(receipt)]
+        if receipt.outcome != CommandOutcome.ACCEPTED:
+            report["error"] = {
+                "type": "CommandOutcomeUnknown"
+                if receipt.outcome == CommandOutcome.UNKNOWN
+                else "CommandRejected",
+                "message": receipt.error.message
+                if receipt.error
+                else "The backend refused this command.",
+            }
+            return 1
+    if result.failure is not None:
+        report["error"] = {
+            "type": "ObservationOrPersistenceError",
+            "message": result.failure.message,
+        }
+        report["state"] = "unconfirmed"
+        return 1
+    return 0
+
+
+def _legacy_snapshot(
+    runtime: Path, request: PlaybackRequest, clock: Clock
+) -> SessionSnapshot | None:
+    legacy = read(runtime / "session.json")
+    if legacy is None:
+        return None
+    target = PlaybackTarget(legacy["device_id"], "cast")
+    owned_request = PlaybackRequest(
+        request.request_id,
+        request.attempt_id,
+        request.queue_item_id,
+        ContentRef(DEFAULT_SERVICE, legacy["content_id"]),
+        target,
+    )
+    return SessionSnapshot(
+        PlaybackScope(
+            owned_request,
+            legacy["app_session_id"],
+            str(uuid4()),
+            clock.monotonic(),
+            legacy["app_id"],
+        )
+    )
 
 
 def execute(
@@ -118,19 +174,31 @@ def execute(
     runtime: Path,
     device_id: str | None = None,
     seconds: float = 30,
+    *,
+    backend_factory: BackendFactory | None = None,
+    clock: Clock | None = None,
+    store: SessionStore | None = None,
+    ownership: Callable[[], SessionSnapshot | None] | None = None,
+    discover: Callable[[], list[Device]] | None = None,
 ) -> tuple[Report, int]:
+    clock = clock or SystemClock()
+    durable = JsonSessionStore(runtime, clock)
+    store = store or durable
     report: Report = {
+        "schema_version": 1,
         "command": command,
-        "started_at": now(),
+        "started_at": clock.utcnow().isoformat(),
         "python": sys.version,
         "gil_enabled": sys._is_gil_enabled(),
         "commands": [],
         "observations": [],
     }
+    path = runtime / "runs" / f"{uuid4()}.json"
+    report["report_path"] = str(path)
+    device_io = False
     code = 0
     queue = None
-    queue_started = False
-    session = None
+    update_queue = False
     with command_lock(runtime):
         try:
             if command not in {"discover", "queue", "probe", "start", "status", "stop"}:
@@ -138,22 +206,26 @@ def execute(
             if not 5 <= seconds <= 120:
                 raise ValueError("Observation window must be between 5 and 120 seconds.")
             if command == "discover":
-                with discovery() as (browser, _):
-                    report["devices"] = sorted(
-                        [device_dict(d) for d in list(browser.devices.values())],
-                        key=lambda d: d["name"] or "",
-                    )
+                if discover is None:
+                    from .cast_backend import discover_devices
+
+                    discover = discover_devices
+                device_io = True
+                report["devices"] = discover()
                 save(runtime / "discovery.json", report)
             elif command == "queue":
                 if device_id is None:
                     raise ValueError("Select an explicit device UUID from discover.")
                 queue = make_queue(device_id)
+                queue["updated_at"] = clock.utcnow().isoformat()
                 save(runtime / "queue.json", queue)
                 report["queue"] = queue
                 report["state"] = "queued"
             else:
-                queue = read(runtime / "queue.json")
-                session = read(runtime / "session.json")
+                # Validate both legacy files and the new snapshot before any device I/O.
+                queue = load_queue(runtime) if (runtime / "queue.json").exists() else None
+                legacy = read(runtime / "session.json")
+                owned = ownership() if ownership is not None else durable.current()
                 if command == "start":
                     queue = load_queue(runtime)
                     device_id = queue["device_id"]
@@ -167,56 +239,119 @@ def execute(
                             "This queue was already started; use status or stop before requeueing."
                         )
                 device_id = (
-                    device_id or (session or {}).get("device_id") or (queue or {}).get("device_id")
+                    device_id
+                    or (owned.scope.request.target.device_id if owned else None)
+                    or (legacy or {}).get("device_id")
+                    or (queue or {}).get("device_id")
                 )
                 if not device_id:
                     raise ValueError("Select an explicit device UUID from discover.")
-                with connect(device_id) as (connection, device):
+                target = PlaybackTarget(device_id, "cast")
+                item = queue["items"][0] if queue is not None else None
+                content = ContentRef(
+                    item["service"] if item else DEFAULT_SERVICE,
+                    item["content_id"] if item else DEFAULT_CONTENT_ID,
+                    title=item["title"] if item else DEFAULT_TITLE,
+                )
+                request = PlaybackRequest(
+                    str(uuid4()),
+                    str(uuid4()),
+                    item["id"] if item else DEFAULT_ITEM_ID,
+                    content,
+                    target,
+                )
+                owned = owned or _legacy_snapshot(runtime, request, clock)
+                if (
+                    command in {"status", "stop"}
+                    and owned is not None
+                    and owned.scope.request.target == target
+                ):
+                    request = owned.scope.request
+                if backend_factory is None:
+                    from .cast_backend import open_backend
+
+                    backend_factory = open_backend
+                device_io = True
+                with backend_factory(target, clock, seconds) as (backend, device):
                     report["device"] = device
-                    report["observations"] += connection.observe(2)
-                    if command in {"probe", "start"}:
+                    report["requested_content_id"] = content.content_id
+                    capabilities = backend.capabilities(target)
+                    report["capabilities"] = {
+                        field.name: getattr(capabilities, field.name).support.value
+                        for field in fields(capabilities)
+                    }
+
+                    def record_receipt(receipt: CommandReceipt) -> None:
+                        report["commands"] = [_wire_receipt(receipt)]
+                        save(path, report)
+
+                    application = PlaybackApplication(backend, store, clock, record_receipt)
+                    if command in {"start", "probe"}:
                         if command == "start" and queue is not None:
                             queue["items"][0]["state"] = "starting"
                             save(runtime / "queue.json", queue)
-                            queue_started = True
-                        start_playback(connection, device_id, seconds, runtime, report)
+                            update_queue = True
+                        result = application.start(request)
                     elif command == "status":
-                        report["observations"] += connection.observe(6)
-                        report["evidence"] = playback_evidence(report["observations"], VIDEO_ID)
-                        report["state"] = current_state(report["observations"], report["evidence"])
-                    elif command == "stop":
-                        stop_playback(connection, device_id, runtime, report)
+                        result = application.status(request, owned)
+                        update_queue = bool(
+                            queue
+                            and queue["device_id"] == device_id
+                            and queue["items"][0]["state"] in {"starting", "playing", "unconfirmed"}
+                        )
+                    else:
+                        # Persist uncertainty before the remote effect, including interrupted calls.
+                        # Refused ownership reconciliation has no remote effect, but stale playing is unsafe.
+                        if queue is not None and queue["device_id"] == device_id:
+                            queue["items"][0]["state"] = "unconfirmed"
+                            save(runtime / "queue.json", queue)
+                            update_queue = True
+                        result = application.stop(request, owned)
+                    code = _result_report(report, result, clock)
+                    if isinstance(backend, WireObservations):
+                        report["observations"] = [
+                            event.copy() for event in backend.raw_observations
+                        ]
+                    if command == "stop":
+                        if report["state"] != "stopped":
+                            report["state"] = "unconfirmed"
+                        report["stop_confirmed"] = bool(
+                            result.snapshot and result.snapshot.state == PlayerState.STOPPED
+                        )
+                        report["stop_verification_source"] = (
+                            "receiver_app_exit" if report["stop_confirmed"] else None
+                        )
         except (Exception, KeyboardInterrupt) as exc:
-            report["error"] = {"type": type(exc).__name__, "message": str(exc)}
-            report.setdefault("state", "unconfirmed" if report["commands"] else "failed")
-            code = 1
-        report["ended_at"] = now()
-        path = runtime / "runs" / f"{uuid4()}.json"
-        report["report_path"] = str(path)
-        save(path, report)
-        status_update = (
-            command == "status"
-            and queue
-            and "error" not in report
-            and queue["device_id"] == device_id
-            and queue["items"][0]["state"] in {"starting", "playing", "unconfirmed"}
-        )
-        if status_update:
-            receivers = [e for e in report["observations"] if e["kind"] == "receiver"]
-            latest_session = receivers[-1].get("app_session_id") if receivers else None
-            if not session or session.get("app_session_id") != latest_session:
-                status_update = False
-        if queue and (
-            queue_started
-            or status_update
-            or (
-                command == "stop"
-                and report.get("stop_confirmed")
-                and queue["device_id"] == device_id
+            logging.getLogger(__name__).exception("Playback operation failed")
+            report["error"] = {
+                "type": type(exc).__name__,
+                "message": "Playback operation failed; inspect local diagnostics."
+                if device_io
+                else str(exc),
+            }
+            report.setdefault(
+                "state", "unconfirmed" if update_queue or report["commands"] else "failed"
             )
-        ):
+            code = 1
+        report["ended_at"] = clock.utcnow().isoformat()
+        try:
+            save(path, report)
+        except OSError:
+            report["error"] = {
+                "type": "PersistenceError",
+                "message": "Could not save the local run report.",
+            }
+            code = 1
+        if queue is not None and update_queue:
             queue["items"][0]["state"] = report["state"]
-            queue["updated_at"] = now()
+            queue["updated_at"] = clock.utcnow().isoformat()
             queue["last_report"] = str(path)
-            save(runtime / "queue.json", queue)
+            try:
+                save(runtime / "queue.json", queue)
+            except OSError:
+                report["error"] = {
+                    "type": "PersistenceError",
+                    "message": "Could not save the local queue state.",
+                }
+                code = 1
         return report, code
