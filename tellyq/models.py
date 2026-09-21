@@ -199,3 +199,65 @@ class LifecycleInspection(TypedDict):
     terminal_wire_diagnostics: int
     terminal_wire_fields: dict[str, dict[WireFieldShape, int]]
     new_hardware_evidence: Literal[False]
+
+
+type MetadataValueType = Literal[
+    "object", "array", "string", "boolean", "number", "null", "invalid"
+]
+
+
+class MetadataStructure(TypedDict):
+    """Fixed-key structural summary; arbitrary provider names/values never cross it."""
+
+    shape: WireFieldShape
+    entries: int | None
+    inspected_nodes: int
+    maximum_depth: int
+    truncated: bool
+    types: dict[MetadataValueType, int]
+
+
+class YouTubeMetadataSample(TypedDict):
+    sequence: int
+    observed_at: str
+    monotonic: float
+    status_count: int | None
+    first_status_only: Literal[True]
+    content_relation: Literal["requested", "other", "unknown"]
+    media_session_relation: Literal["first", "same", "changed", "unknown"]
+    player_state: str | None
+    custom_player_state: int | None
+    custom_player_state_shape: WireFieldShape
+    idle_reason: str | None
+    position: float | None
+    duration: float | None
+    ad_break: bool | None
+    custom_data: dict[Literal["status", "media", "extended_media"], MetadataStructure]
+
+
+class PrivateMetadataField(TypedDict):
+    """Untrusted names for private runtime inspection only; never a public export."""
+
+    path: list[str]
+    value_type: MetadataValueType
+    entries: int | None
+
+
+class PrivateMetadataSchema(TypedDict):
+    sequence: int
+    fields: dict[Literal["status", "media", "extended_media"], list[PrivateMetadataField]]
+    truncated: bool
+
+
+class YouTubeMetadataRecord(TypedDict, total=False):
+    schema_version: Required[Literal[1]]
+    kind: Required[Literal["begin", "sample", "end"]]
+    observed_at: Required[str]
+    read_only: Required[Literal[True]]
+    completion_authorized: Required[Literal[False]]
+    sample: YouTubeMetadataSample
+    private_schema: PrivateMetadataSchema
+    stop_reason: Literal["deadline", "interrupted", "backend_error"]
+    samples: int
+    dropped_samples: int
+    seconds: float

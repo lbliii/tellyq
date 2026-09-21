@@ -34,6 +34,7 @@ from .models import Device, Observation
 
 if TYPE_CHECKING:
     from .cast import Connection
+    from .youtube_metadata import YouTubeMetadataProbe
 
 
 @runtime_checkable
@@ -502,10 +503,18 @@ def open_backend(
     seconds: float,
     *,
     read_only: bool = False,
+    metadata_probe: YouTubeMetadataProbe | None = None,
 ) -> Iterator[tuple[CastBackend, Device]]:
+    if metadata_probe is not None and not read_only:
+        raise ValueError("Metadata inspection requires an observation-only backend.")
     from .cast import connect
 
-    with connect(target.device_id) as (connection, device):
+    connection_context = (
+        connect(target.device_id)
+        if metadata_probe is None
+        else connect(target.device_id, metadata_probe=metadata_probe)
+    )
+    with connection_context as (connection, device):
         yield (
             CastBackend(_Transport(connection), target, clock, seconds, read_only=read_only),
             device,
