@@ -40,12 +40,18 @@ checkpoint passed 487 automated tests and packaging checks. Three live runs acro
 two titles produced ending candidates, but initially failed pause/resume and
 completion acceptance. The repairs merged at `e4b2a91`, which passed 531 tests.
 The repaired live diagnostic verified pause/resume and cleanup stop; the user also
-confirmed visible pause. Completion remains unverified. Two focused metadata runs
+confirmed visible pause. Two focused metadata runs
 identified a YouTube-specific numeric state field, with first-party source evidence
 for separate ad states. Duration was already available. The
-[metadata investigation](docs/YOUTUBE-METADATA.md) defines the next interpretation
-and content-correlation work. The [M2a checkpoint](docs/M2A-CHECKPOINT.md)
-preserves every attempt and the remaining gates. Automatic queue advancement
+[metadata investigation](docs/YOUTUBE-METADATA.md) supplied the basis for a finite
+YouTube state interpreter and ordered content attribution. The
+[completion batch](docs/M2A-COMPLETION-PLAN.md) adds those contracts, historical
+completion reporting and a repeatable single-video checkpoint runner. Reviewed
+candidate `2599345` passed 666 offline tests and three live natural endings across
+two titles, including verified and visible pause/resume. It also retained completion
+through a later ad state and content replacement while refusing unsafe cleanup.
+These changes await merge. The [M2a checkpoint](docs/M2A-CHECKPOINT.md) preserves
+every attempt, the exact candidate and remaining limits. Automatic queue advancement
 remains unimplemented.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
@@ -81,8 +87,11 @@ accidental repeated `start` calls do not restart an active/uncertain attempt.
 
 All commands emit JSON. `commands[].returned` records the command result;
 `evidence.receiver_playback_confirmed` requires the requested content ID, PLAYING
-state, two advancing positions from the same media session, and explicitly
-inactive ad state. It does **not** prove the TV is displaying the video. Observations retain unknown fields as null.
+state, two advancing positions from the same media session, and qualified inactive
+ad evidence. The YouTube adapter can supply that evidence from reviewed provider
+states with fresh receiver identity and consistent Cast telemetry; missing break
+metadata alone remains unknown. This does **not** prove the TV is displaying the
+video. Observations retain unknown fields as null.
 Exit code 0 means the operation completed; inspect the evidence/state for its
 outcome. A timeout may leave playback unconfirmed, so inspect status before retrying.
 
@@ -118,9 +127,9 @@ control the TV. See [contributor guidance](CONTRIBUTING.md) for coverage, option
 commit hooks, dependency changes and the macOS/Linux CI checks. For a sandbox-local
 uv cache, prefix uv commands with `UV_CACHE_DIR=runtime/uv-cache`.
 
-See [implementation work and verification](docs/IMPLEMENTATION.md). Natural-ending
-experiments have been performed, but completion acceptance remains blocked. No
-automatic queue advancement test has been performed.
+See [implementation work and verification](docs/IMPLEMENTATION.md) and the
+[commit-specific completion checkpoint](docs/M2A-CHECKPOINT.md). No automatic
+queue advancement test has been performed.
 
 ## Longer-term direction
 

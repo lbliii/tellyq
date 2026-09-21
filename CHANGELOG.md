@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+- Interpret a finite set of source-qualified YouTube player states and attribute
+  valid incremental terminals through ordered content history. Preserve a separate
+  historical completion witness, invalidate uncertain chains, and keep routine
+  status windows within the evidence freshness limit.
+- Add a bounded single-video checkpoint runner with private command/observation
+  journaling, isolated state, optional guarded pause/resume and owned-session
+  cleanup. Unconfirmed terminal candidates cannot shorten its observation budget.
 - Add opt-in YouTube metadata diagnostics with bounded field types/counts and a
   separate private schema capture. A reviewed numeric `customData.playerState`
-  field remains diagnostic only; ordinary reports and completion policy are unchanged.
+  field was initially diagnostic only; the completion interpretation above now
+  uses a separately reviewed finite contract.
 - Record two scoped metadata runs and pinned first-party YouTube source evidence.
   They identify a provider-state candidate for completion work; ad-specific codes
   remain unobserved and automatic advancement stays disabled.

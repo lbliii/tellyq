@@ -7,10 +7,13 @@ checks, macOS/Linux CI and the bounded live regression. **M1 passed at `71a3c39`
 Unknown ad state remains explicit. M2's first batch is merged at `7a08929`; its
 487-test offline checkpoint passed. Repairs merged at `e4b2a91`, which passed 531
 tests and a live pause/resume/cleanup diagnostic. The user confirmed visible pause.
-Two scoped metadata runs identified a YouTube-specific state candidate; M2a remains
-blocked on its interpretation and sufficient completion evidence. See the [M1 acceptance
-record](M1-ACCEPTANCE.md) and [M2a checkpoint](M2A-CHECKPOINT.md) for commit-specific
-results and remaining gates.
+The completion candidate `2599345`, based on merged `fe73b6d`, passed 666 offline
+tests and M2a's lifecycle gate: three supported endings across two titles and a
+verified pause/resume. One run also captured ad code 1081 and subsequent content
+replacement; cleanup correctly refused that replacement. These are candidate
+results pending merge, not a claim about current `main`. See the [M1 acceptance
+record](M1-ACCEPTANCE.md) and [M2a checkpoint](M2A-CHECKPOINT.md) for exact results
+and remaining ad/recovery limits.
 
 ## Product goal
 
@@ -28,7 +31,7 @@ are proven on the actual device. A graphical interface is optional.
 | --- | --- | --- | --- |
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
-| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: controls passed; M2a completion requires a justified metadata route; automatic advancement is not implemented |
+| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: M2a lifecycle gate passed on candidate `2599345`; M2b persistent owner and automatic advancement remain unimplemented |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | M2 |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
 | M5 | One subscription service integrated | Two exact titles, three start/status/stop runs, and two cross-service handoffs pass the supported autonomy level | M2 + M4 |
@@ -93,9 +96,11 @@ Subsequent content reused a media-session ID. Repairs merged at `e4b2a91` and a
 fresh live diagnostic passed pause/resume and cleanup; the user confirmed pause.
 Duration is already available. The [metadata investigation](YOUTUBE-METADATA.md)
 identified a numeric provider state and first-party source evidence for separate
-ad states. The next step is source-qualified interpretation and content attribution,
-followed by full completion acceptance. The [acceptance record](M2A-CHECKPOINT.md)
-preserves earlier failures and the completion gate before the runner is built.
+ad states. The reviewed completion candidate then passed the three-run/two-title
+lifecycle acceptance, including pause/resume, one positive ad code and replacement
+ownership refusal. The [acceptance record](M2A-CHECKPOINT.md) preserves earlier
+failures and specific untested ad/recovery behavior. M2b is the next implementation
+stage after the candidate merges.
 
 Split into two small deliverables.
 
@@ -225,10 +230,14 @@ separate compatibility lane, not a prerequisite for the useful release.
 
 ## Immediate next work
 
-Review a finite YouTube-specific interpretation of the observed numeric state
-field, backed by the pinned first-party source. Combine it with ordered content
-history and explicit invalidation on replacement, gaps and reconnects. Keep unknown
-codes and unvalidated ad behavior explicit. The schema and numeric diagnostics
-have identified the next implementation target; repeating them is unnecessary.
-The persistent runner and automatic advancement follow only once the proposed
-completion decision has passed review, offline tests and full live acceptance.
+Merge the independently tested completion and checkpoint branches, then validate
+the actual merged tree. Begin M2b with one persistent playback owner, a pure queue
+reducer, and durable command execution/recovery. Keep each agent branch targeted
+at `main` and freeze shared contracts before dividing file ownership.
+
+The first runner checkpoint must prove single ownership, responsive status/stop,
+no duplicate dispatch after crash/restart, and a hold on replacement content.
+Automatic handoff acceptance follows integration: three three-item sessions with
+six correct handoffs, plus interruption/recovery cases. The new checkpoint's
+code-1081 evidence is useful but does not validate every ad path; expand live
+coverage where those cases occur. Do not substitute elapsed runtime for completion.

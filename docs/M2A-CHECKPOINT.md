@@ -1,9 +1,10 @@
 # M2a checkpoint and repair acceptance
 
-Updated 2026-09-21. **M2a's controls gate passed on `e4b2a91`; completion remains
-unverified.** The first checkpoint's failed attempts remain in the ledger below.
-After the repair batch merged, one live diagnostic verified pause/resume and
-cleanup stop. The user separately confirmed seeing the pause. No automatic queue
+Updated 2026-09-21. **M2a's lifecycle-signal gate passed on reviewed combined
+candidate `2599345`, based on merged `fe73b6d`: three supported natural endings,
+two titles and one verified pause/resume.** Controls previously passed on `e4b2a91`. Earlier failed and inconclusive attempts remain below; the new
+completion batch and its exact validation are recorded at the end. Candidate
+results do not claim that these changes are already on `main`. No automatic queue
 advancement was attempted or enabled.
 
 ## Tested baseline
@@ -133,7 +134,7 @@ terminal supplied neither duration nor identity. These are diagnostic context,
 not a time-based completion decision. The [metadata investigation](YOUTUBE-METADATA.md)
 separates documented semantics, library caching and observed fields.
 
-## Metadata diagnostic and remaining acceptance
+## Metadata diagnostic and acceptance plan at `fe73b6d`
 
 The repaired diagnostic narrowed the next step to provider custom data. The first
 scoped metadata run used observer `61b839e` with the unchanged `e4b2a91` controller.
@@ -183,14 +184,14 @@ media-session ID alone is insufficient. A source-qualified ad rule could be
 legitimate without a literal false boolean, but the existing gate is unchanged
 in this batch.
 
-The next batch should review a finite YouTube-specific state interpretation and
+The next batch was planned to review a finite YouTube-specific state interpretation and
 ordered content attribution using the pinned source and observations. It needs
 offline cases for unknown/invalid codes, ads, conflicting fields, reused IDs,
 replacement, gaps and reconnects before a policy change and full live acceptance.
 Schema-only capture has answered its question; do not repeat it. The decision and
 bounded fallback are in the [metadata investigation](YOUTUBE-METADATA.md#decision-and-bounded-next-work).
 
-Once a supported evidence route exists, the full acceptance set must:
+The acceptance plan for a supported evidence route was:
 
 1. Pull the actual merged commit and run the automated checks. Select the existing
    approved receiver, inspect current playback, and preserve local state. Record
@@ -215,3 +216,117 @@ verified pause/resume run and a justified completion decision. If the necessary
 signal is still absent, record that specific blocker and hold advancement. M2b's
 persistent owner, durable queue integration and automatic handoff tests remain
 subsequent work in [the execution plan](M2-PLAN.md).
+
+## Completion candidate validation
+
+The metadata PRs merged at `fe73b6d`, which passed 566 offline tests. Two independent
+implementation branches target that baseline:
+
+| Stream | Candidate | Independent validation |
+| --- | --- | --- |
+| [Completion core, PR #20](https://github.com/lbliii/tellyq/pull/20) | Code `33b3261`; subsequent changes only update documentation | 635 tests, Ruff/format/ty, source/wheel builds and isolated installation |
+| [Single-video checkpoint runner, PR #21](https://github.com/lbliii/tellyq/pull/21) | `ecdee48` | 597 tests, including 31 focused runner cases, plus lint/types/build/install |
+| Exact combined code | Temporary integration commit `259934502435276f2d6ecbb63b501c5b94ea940f` | 666 tests, 93.8% branch-inclusive coverage, Ruff/format/ty, builds and isolated installation |
+
+Both code merge orders produce tree `d276060b7ad780377a4a5c013f2322e8ea0ede17`.
+The later core documentation change records observed pause evidence and does not
+change the tested implementation. The [completion plan](M2A-COMPLETION-PLAN.md)
+records ownership and boundaries; each PR remains independently testable.
+
+Code review qualified provider codes against the pinned first-party source, kept the
+provider interpreter outside generic policy, and covered unknown/malformed fields,
+positive ad context, conflicting states, stale samples, sequence gaps, replay
+partials, reconnects, source changes and replacement. It also fixed same-batch
+completion followed by replacement, and routine status windows that were longer
+than the existing evidence freshness limit. The runner starts its final collection
+window only after a verified completion; an unconfirmed or ad terminal cannot
+shorten the run. Verified pause ownership must survive until resume dispatch.
+
+### Completion rule exercised live
+
+The finite YouTube interpreter requires fresh exact receiver-app identity,
+consistent standard/player states and the reviewed provider code. Absent break
+metadata alone does not prove inactive ads. Qualified ordinary code 0 with
+IDLE / FINISHED may be attributed to the requested content through recent,
+contiguous, same-source ownership/progress history. The raw terminal keeps its
+missing content identity. The report records `ordered_history` attribution,
+source, terminal sequence and the exact-content anchor separately.
+
+One historical witness survives later buffering and cleanup. It cannot grant
+ownership over a replacement session or create a second completion. Neither
+published duration, elapsed time, reaching duration nor app exit is used to infer
+an ending. A future queue runner must consume the witness once and reconcile
+current ownership before launching anything else.
+
+### Three-run live acceptance (`2599345`)
+
+All three invocations used the same unchanged tested checkout, CPython 3.14.0
+with the GIL enabled, PyChromecast 14.0.10 and casttube 0.2.1. Each required a
+fresh idle receiver before launch, ran one selected video, and used an isolated
+session store while retaining the private legacy queue/session hashes. The
+observation budget was 240 seconds with a 20-second window after confirmed
+completion. A1 included a 20-second guarded pause hold with continuous observation.
+
+| Attempt | Natural-completion evidence | Controls and cleanup | Process result |
+| --- | --- | --- | --- |
+| A1: title A | One anonymous FINISHED/code-0 terminal, attributed through ordered history; one witness | Pause and resume observed; subsequent stop observed; final state STOPPED | Exit 0, normal post-terminal window |
+| B: title B | Two FINISHED candidates, first anonymous and second explicit; one completion witness | Stop observed; final state STOPPED | Exit 0, normal post-terminal window |
+| A2: title A repeat | One anonymous FINISHED/code-0 terminal; one witness retained after replacement in the same observation batch | Cleanup refused after known replacement; no stop command dispatched | Exit 1 signals refused cleanup, not a failed completion or an exception |
+
+All three reported `receiver_playback_observed=true` and
+`natural_completion_observed=true`. There were no observation/backend errors and
+all journals contain normal end records. Legacy queue/session hashes remained
+unchanged. A1 and B preserved ENDED through later code-5 BUFFERING until the
+separate cleanup stop. A2 ended with current state UNKNOWN / `session_replaced`
+and `ownership_lost=true`, while retaining its historical completion witness.
+The runner left replacement playback untouched and all controller processes exited.
+
+The user confirmed seeing A1 pause and resume. They did not observe the first
+ending when initially asked, then later confirmed that the last clip they watched
+ended normally. That later reply is retained as visual evidence without assigning
+it to a particular attempt. After A2, the user separately confirmed seeing an
+ad or another video. Cleanup and each individual ending were not visually confirmed. Software and visual evidence therefore remain distinct.
+
+Provider-code counts across the complete private journals were:
+
+| Run | Media samples | Code counts |
+| --- | --- | --- |
+| A1 | 99 | -1: 4; 3: 7; 1: 60; 2: 16; 0: 1; 5: 11 |
+| B | 64 | -1: 5; 3: 3; 1: 43; 0: 2; 5: 11 |
+| A2 | 96 | -1: 16; 3: 8; 1: 65; 0: 1; 5: 1; 1081: 5 |
+
+A2 supplied the first positive live ad-family samples: five code-1081 messages
+after the requested program ended and different content appeared. The standard
+Cast state was BUFFERING; the adapter correctly retained that state while
+reporting `ad_active=true` and provider phase AD. The same historical completion
+remained unchanged. Different content subsequently reached PLAYING. This is
+consistent with provider autoplay, but the cause of the transition is not proven.
+No second TellyQ launch occurred in this invocation.
+
+All observation windows were projected from each private checkpoint journal into
+the lifecycle format, preserving raw normalized samples, order and window return
+times. Sanitization and offline replay reconfirmed each completion. These are
+projections of the existing runs, not new passive captures or new hardware tests;
+command chronology remains in the source journals. The reviewed projections and
+full logs stay in ignored `runtime/`.
+
+### Acceptance and remaining limits
+
+The lifecycle-signal gate passes for this exact candidate and observed receiver.
+The three endings and verified pause/resume support starting M2b implementation
+after these PRs merge and the merged checks pass. The nonzero A2 cleanup result is
+retained explicitly: refusal after replacement is the intended ownership behavior.
+Earlier failed/inconclusive attempts remain in this ledger; these three new runs
+do not erase them or establish statistical reliability.
+
+Live evidence covers code 1081 after completion, not every ad-family code,
+mid-program ads, ad endings, ad pause/resume or disconnect/recovery. Those paths
+have conservative synthetic coverage and remain targets for later live testing.
+Unknown codes -1 and 5 still have unknown semantics. The provider contract is
+pinned implementation evidence, not a stable public YouTube API guarantee.
+
+Natural completion is process-local history. A restart cannot restore monotonic
+freshness or use an old witness to launch another item. M2b must integrate durable
+intent and recovery, consume one completion once, cancel pending work on stop,
+and hold on provider replacement rather than competing with it. No persistent
+queue runner, automatic handoff or unattended queue acceptance has been delivered.

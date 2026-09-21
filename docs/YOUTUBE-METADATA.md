@@ -41,9 +41,9 @@ evidence. A seek or replacement can also put a player near the end.
 These are [Cast media message semantics](https://developers.google.com/cast/docs/media/messages),
 not a guarantee that every receiver supplies every optional field. In particular,
 the media object need not be repeated when unchanged. Treating an omitted terminal
-identity as a fresh explicit identity would be wrong; a future correlation rule
-would need to label its use of prior observations and invalidate it at uncertain
-boundaries.
+identity as a fresh explicit identity would be wrong; any correlation rule
+must label its use of prior observations and invalidate it at uncertain boundaries.
+The completion candidate now implements that separate attribution contract.
 
 The [MediaStatus reference](https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaStatus)
 also specifies optional `breakStatus`, queue-item IDs, and `extendedStatus` for
@@ -60,12 +60,13 @@ or exclude ad time from content duration. For a validated implementation of that
 contract, absence in an appropriate complete status can have a defined meaning.
 We have not established that YouTube reports every ad through this mechanism.
 
-Requiring explicit inactive-ad evidence is TellyQ's current conservative policy;
-it is not a universal Cast requirement for a literal false boolean. A documented,
-source-specific rule could resolve uncertainty without such a boolean, provided
-the route's contract and observed behavior justify it. That would require a
-separate policy review and live acceptance, including ads and content transitions.
-This batch neither declares missing ads inactive nor changes the completion gate.
+Requiring qualified inactive-ad evidence is TellyQ's conservative policy;
+it is not a universal Cast requirement for a literal false boolean. The metadata
+batch left the production gate unchanged. The subsequent completion candidate
+uses a separately reviewed finite provider rule, qualified by fresh receiver
+identity and consistent standard state. Missing break metadata alone remains
+unknown. A subsequent run captured code 1081 after completion; other ad-family
+states and mid-program transitions still need live validation.
 
 No public YouTube Cast custom-data schema was found in this bounded primary-source
 review. A plausible key such as `isAd` is therefore only a diagnostic candidate
@@ -197,20 +198,23 @@ material, receiver/session IDs and local addresses stay out of Git. A parser's
 allowlist is a privacy boundary, not a declaration that a provider supports those
 fields. The experiment uses a finite observation budget, not an end-time guess.
 
-The result is a **concrete provider-state candidate**, not a proven completion
-capability. Duration was never the missing field. The next batch should review a
-finite YouTube-specific interpretation and ordered content correlation, using the
-pinned first-party source and captured codes together. Keep unknown codes,
-malformed values, conflicting standard/provider states, ads, content replacement,
-reconnects and observation gaps explicit. Previously cached content must not become
-freshly observed identity, and an anonymous terminal needs its own documented
-attribution rule. The present production gate remains unchanged.
+The metadata investigation produced a **concrete provider-state candidate**.
+Duration was never the missing field. The subsequent
+[completion batch](M2A-COMPLETION-PLAN.md) implements a finite YouTube-specific
+interpretation and ordered content correlation using the pinned source and captured
+codes together. Unknown codes, malformed values, conflicting states, ad context,
+content replacement, reconnects and observation gaps remain explicit. Cached
+content does not become freshly observed identity; anonymous terminals have a
+separate historical attribution witness.
 
-Once that rule has a defensible contract and offline replay coverage, repeat the
-three-run/two-title acceptance set, preserving start/control chronology and visible
-evidence separately. Validate ad-specific behavior or retain its exact untested
-limitation; ordinary-code runs alone do not validate the positive ad path. Do not
-repeat schema-only captures now that the useful field has been identified.
+The [checkpoint ledger](M2A-CHECKPOINT.md#completion-candidate-validation)
+records exact offline and live acceptance for that candidate. The new three-run
+set captured code 2 during a verified and visible pause, and five code-1081 samples
+after one requested program ended and different content appeared. Those samples
+normalized to active ad context without erasing or duplicating the original
+completion. Other ad-family codes, mid-program ads and ad endings remain
+unvalidated on this receiver; synthetic cases do not replace that live evidence.
+Do not repeat schema-only captures now that the useful field has been identified.
 
 If the candidate cannot support reliable completion, record that limitation. The
 smallest next research option is one bounded observation through the already
@@ -225,7 +229,8 @@ this existing Chromecast playback session. Replacing the playback surface would
 be a separate architecture experiment, not a metadata fix. No new UI, hardware
 or custom receiver is introduced here.
 
-M2a still requires three supported natural endings across two titles and a
-justified completion decision. The repaired pause/resume gate has passed. The
-runner, automatic queue advancement and cross-service work remain subsequent
-milestones; see the [checkpoint ledger](M2A-CHECKPOINT.md).
+M2a's acceptance uses three supported natural endings across two titles and a
+justified completion decision. Its exact candidate result is in the
+[checkpoint ledger](M2A-CHECKPOINT.md). The persistent queue owner, automatic
+advancement and cross-service work remain subsequent milestones. The single-video
+checkpoint runner is diagnostic tooling, not the M2b queue runner.
