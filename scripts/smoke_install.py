@@ -35,6 +35,19 @@ def check_members(members: list[str]) -> None:
         raise RuntimeError("The distribution is missing its typing marker.")
 
 
+def check_source_fixtures(members: list[str], root: Path = ROOT) -> None:
+    """Require all reviewed fixture formats in the source archive, across suites."""
+    expected = {
+        path.relative_to(root).as_posix()
+        for path in (root / "tests" / "fixtures").rglob("*")
+        if path.is_file() and path.suffix in {".json", ".jsonl", ".md"}
+    }
+    # An sdist has one project/version directory above its repository paths.
+    included = {Path(*Path(member).parts[1:]).as_posix() for member in members}
+    if missing := expected - included:
+        raise RuntimeError(f"Source distribution is missing reviewed fixtures: {sorted(missing)}")
+
+
 def main() -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text())
     version = metadata["project"]["version"]
@@ -43,7 +56,9 @@ def main() -> None:
     with zipfile.ZipFile(wheel) as archive:
         check_members(archive.namelist())
     with tarfile.open(sdist) as archive:
-        check_members(archive.getnames())
+        members = archive.getnames()
+        check_members(members)
+        check_source_fixtures(members)
 
     # A relative cache path must keep pointing at the checkout when cwd changes.
     if cache := os.environ.get("UV_CACHE_DIR"):

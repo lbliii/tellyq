@@ -38,8 +38,10 @@ policy evidence, and offline replay also excludes them from completion decisions
 Each window preserves every **normalized adapter field** available at capture time,
 including unknown ads, idle reasons, empty status, connection errors, app transitions
 and observation timestamps/order. These are **not original Cast protocol frames**.
-The current parser may discard relevant provider fields; a missing signal may require
-a separately reviewed adapter change and another capture.
+The parser intentionally discards arbitrary provider payloads. New media records
+also describe a fixed set of wire field shapes, so another capture can distinguish
+omission from invalid fields or discarded alternatives without saving the payloads.
+Older captures cannot reconstruct this distinction from normalized nulls.
 
 `gap` records distinguish two kinds of observation absence longer than five seconds:
 
@@ -100,6 +102,9 @@ uv run --locked python scripts/capture_lifecycle.py sanitize \
 uv run --locked python scripts/capture_lifecycle.py replay \
   runtime/lifecycle/bob-ross-run-1-sanitized.jsonl \
   runtime/lifecycle/bob-ross-run-1-replay.jsonl
+
+uv run --locked python scripts/capture_lifecycle.py inspect \
+  runtime/lifecycle/bob-ross-run-1.jsonl
 ```
 
 Export allowlists scalar fields and known enum values, replaces device/session/app/
@@ -122,6 +127,97 @@ finished, duplicate terminal events, ads extending past nominal duration, unknow
 long pause, buffering, manual cancellation/error, app exit, provider autoplay/takeover,
 disconnect, silent timeout, interrupted capture, privacy export and normalized replay.
 These tests prove implementation behavior; they are not hardware acceptance runs.
+An additional [reviewed observed excerpt](../tests/fixtures/lifecycle/README.md)
+preserves the A3 anonymous endings and intervening content change. It is explicitly
+incomplete. Separate, labelled synthetic mutations establish that stronger ad or
+identity claims still cannot reclaim a scope after a known takeover.
+
+## Completion blocker and field provenance
+
+The merged-main checkpoint at `7a08929` produced three requested-title terminal
+candidates, all with unknown ads and missing terminal content identity. A3 then
+reported different content using the same media-session identifier and another
+FINISHED. Strict completion remains blocked; this change does not enable
+advancement or carry content identity forward onto anonymous terminals.
+
+TellyQ's `Observer.receive_message` sees the incoming media JSON and applies its
+own normalizer. It does not source these observations from PyChromecast's mutable
+`MediaStatus` cache. That distinction matters: the pinned library carries prior
+content, position and other fields forward when updates omit them. Cached identity
+would therefore not establish that a terminal message supplied fresh content.
+See [PyChromecast 14.0.10 MediaStatus.update](https://github.com/home-assistant-libs/pychromecast/blob/14.0.10/pychromecast/controllers/media.py).
+
+Google's [media protocol](https://developers.google.com/cast/docs/media/messages)
+allows status updates to omit unchanged media information and distinguishes natural
+FINISHED from cancellation, interruption and error. Omission alone is therefore
+not malformed. However, the observed same-ID content change rules out attributing
+an ending from media-session identity alone. Ordered content history with reviewed
+boundaries might support future attribution; these traces do not establish whether
+that would be sufficient. Missing terminal identity and unknown ads still block
+the current strict completion policy.
+
+The [MediaStatus reference](https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaStatus)
+defines optional `breakStatus`, application-specific `customData`, extended loading
+status and queue item identifiers. It does not establish that missing break status
+proves an ad-free YouTube stream. The current normalizer can detect reported break
+activity, but has no validated source of explicit inactive-ad evidence on this route.
+Neither absent fields, empty objects, metadata break lists nor control support flags
+are promoted into `ad_break: false`.
+
+New `Observation` fields are additive diagnostics only:
+
+| Diagnostic | Incoming field examined |
+| --- | --- |
+| `wire_status_count` | Number of entries in `status`, or null for a non-list |
+| `wire_media`, `wire_media_content_id` | First status's `media` and its `contentId` |
+| `wire_extended_status`, `wire_extended_media`, `wire_extended_content_id` | `extendedStatus`, its `media`, and that media's `contentId` |
+| `wire_break_status` | `breakStatus` object |
+| `wire_break_id`, `wire_break_clip_id`, `wire_break_time`, `wire_break_clip_time` | Its `breakId`, `breakClipId`, `currentBreakTime`, `currentBreakClipTime` |
+| `wire_status_custom_data`, `wire_media_custom_data`, `wire_extended_media_custom_data` | Presence/type of the three known `customData` containers |
+| `wire_media_breaks`, `wire_media_break_clips` | Primary media's `breaks` and `breakClips` lists |
+| `wire_current_item_id`, `wire_loading_item_id`, `wire_preloaded_item_id` | Nonnegative integer queue-item identifiers; their values are discarded |
+
+Shapes are `absent` (valid parent, missing key), `null`, `valid`, `invalid`, or
+`unavailable` (parent missing, null or invalid). `valid` describes type/shape only:
+an empty object/list is still a valid container, not complete or truthful metadata.
+Nonempty strings, finite nonnegative seconds and nonnegative integer IDs are
+validated without coercion. No arbitrary keys, custom data, break IDs, URLs or
+queue-item values cross this diagnostic boundary. Fields always describe the
+current message. Explicit empty media status retains its legacy two-field shape.
+The first status remains the sole normalization input; count >1 exposes that
+limitation without silently selecting a different media session.
+
+`inspect` validates and sanitizes input in memory, then prints only aggregate
+media/terminal counts and wire-shape histograms. Requested/other/unknown terminal
+identity comes from each terminal's own content field; no media-session inference
+is used. It reports partial windows, partial terminal counts, end-record presence
+and stop reason separately. It never marks a capture accepted or advances anything.
+Old traces correctly report zero wire-diagnostic coverage. Replay still recomputes
+policy independently and excludes interrupted partial windows.
+
+## Next bounded diagnostic
+
+During the next explicitly authorized hardware checkpoint, use the same passive
+capture command on a fresh short title, starting from a visibly idle receiver before
+launch. Preserve the independent launch/control log, actual user observations and
+the natural ending plus subsequent app/content state. Do not seek. Use a finite
+budget with headroom for pause, buffering and ads; deadline is still not completion.
+
+Inspect the resulting trace before repeating three full acceptance runs:
+
+1. Check wire-diagnostic coverage and compare all-message with terminal histograms.
+   If primary/extended content or break fields are malformed or a valid alternative
+   is unselected, inspect that named normalization path with a synthetic test.
+2. If only provider `customData` or queue-item fields are present, review a separately
+   scoped field parser or provider observation route first. Shape availability does
+   not establish its semantics. Do not export arbitrary provider payloads or tokens.
+3. If no supported path supplies fresh content attribution and explicit inactive-ad
+   evidence, record the current Cast route as insufficient for unattended completion.
+   Keep assisted start/status/stop available; do not repeat identical runs hoping an
+   anonymous FINISHED or the nominal duration will pass.
+
+Only after a supported evidence route exists should the full natural-ending gate
+below be rerun. Pause/resume repair and its live verification remain a parallel gate.
 
 ## Acceptance gate
 

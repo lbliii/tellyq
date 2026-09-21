@@ -29,6 +29,7 @@ from tellyq.lifecycle import (
     LifecycleTracker,
     capture_lifecycle,
     export_capture,
+    inspect_capture,
     replay_capture,
 )
 from tests.playback_support import FakeTransport
@@ -740,3 +741,110 @@ def test_sanitizer_preserves_known_launch_failures_without_diagnostics():
     normal["reason"] = "SECRET arbitrary details"
     assert "reason" not in CaptureSanitizer().observation(normal)
     assert "SECRET" not in json.dumps(CaptureSanitizer().observation(normal))
+
+
+def test_wire_diagnostics_export_allowlist_and_offline_inspection(tmp_path):
+    from tellyq.cast_messages import normalize_message
+    from tellyq.models import MediaWireDiagnostics
+
+    records = private_records()
+    event = normalize_message(
+        {
+            "type": "MEDIA_STATUS",
+            "status": [
+                {
+                    "playerState": "IDLE",
+                    "idleReason": "FINISHED",
+                    "mediaSessionId": 99,
+                    "customData": {"SECRET": "SECRET"},
+                    "breakStatus": {},
+                }
+            ],
+        }
+    )
+    assert event is not None
+    event["monotonic"] = 100.5
+    records[1]["observations"] = [event]
+    records[1]["partial"] = True
+    safe = CaptureSanitizer().observation(event)
+    assert {
+        key for key in safe if key.startswith("wire_")
+    } == MediaWireDiagnostics.__optional_keys__
+    assert safe["wire_status_custom_data"] == "valid"
+    assert safe["wire_break_status"] == "valid"
+    assert safe["ad_break"] is None
+    malicious = dict(event)
+    malicious.update(wire_media="SECRET", wire_unknown="valid", wire_status_count=True)
+    exported = CaptureSanitizer().observation(malicious)
+    assert "wire_media" not in exported and "wire_unknown" not in exported
+    assert exported["wire_status_count"] is None
+    source = tmp_path / "source.jsonl"
+    with JsonlJournal(source) as journal:
+        for record in records:
+            journal.write(record)
+    report = inspect_capture(source)
+    assert report["terminal_candidates"] == 1
+    assert report["terminal_content"] == {"requested": 0, "other": 0, "unknown": 1}
+    assert report["terminal_ad"] == {"active": 0, "inactive": 0, "unknown": 1}
+    assert report["terminal_wire_diagnostics"] == 1
+    assert report["terminal_wire_fields"]["wire_media"] == {"absent": 1}
+    assert report["terminal_wire_fields"]["wire_break_id"] == {"absent": 1}
+    assert report["partial_windows"] == 1
+    assert report["partial_terminal_candidates"] == 1
+    assert report["media_observations"] == 1
+    assert report["wire_diagnostic_observations"] == 1
+    assert report["wire_fields"] == report["terminal_wire_fields"]
+    assert report["end_record_present"] is True
+    assert report["new_hardware_evidence"] is False
+    assert "SECRET" not in json.dumps(report)
+    script = Path(__file__).resolve().parents[1] / "scripts/capture_lifecycle.py"
+    completed = subprocess.run(
+        [sys.executable, str(script), "inspect", str(source)],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(completed.stdout) == report
+    assert not (tmp_path / "runtime").exists()
+
+
+@pytest.mark.parametrize("content,ad", [("video-id", False), ("other-id", True), (None, None)])
+def test_inspection_counts_only_explicit_terminal_fields(tmp_path, content, ad):
+    records = private_records()
+    terminal = records[1]["observations"][0]
+    terminal.update(idle_reason="FINISHED", content_id=content, ad_break=ad)
+    terminal.pop("position")
+    terminal.pop("duration")
+    source = tmp_path / "source.jsonl"
+    with JsonlJournal(source) as journal:
+        for record in records:
+            journal.write(record)
+    result = inspect_capture(source)
+    relation = "requested" if content == "video-id" else "other" if content else "unknown"
+    assert result["terminal_content"][relation] == 1
+    assert result["terminal_ad"]["unknown" if ad is None else "active" if ad else "inactive"] == 1
+    assert result["terminal_wire_diagnostics"] == 0  # Old captures cannot recover wire provenance.
+
+
+def test_inspection_does_not_promote_incomplete_or_interrupted_capture(tmp_path):
+    records = private_records()
+    for record in records:
+        record.pop("observations", None)
+    source = tmp_path / "source.jsonl"
+    with JsonlJournal(source) as journal:
+        for record in records[:-1]:
+            journal.write(record)
+    report = inspect_capture(source)
+    assert report["end_record_present"] is False and report["stop_reason"] is None
+    source.unlink()
+    records[-1]["stop_reason"] = "interrupted"
+    with JsonlJournal(source) as journal:
+        for record in records:
+            journal.write(record)
+    report = inspect_capture(source)
+    assert report["end_record_present"] is True and report["stop_reason"] == "interrupted"
+    empty = tmp_path / "empty.jsonl"
+    empty.write_text("")
+    with pytest.raises(ValueError, match="begin record"):
+        inspect_capture(empty)

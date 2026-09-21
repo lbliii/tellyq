@@ -4,11 +4,12 @@ No fields are carried forward from previous messages. The transport supplies
 timestamps after parsing; correlation and playback decisions belong to policy.
 """
 
+from collections.abc import Callable
 from math import isfinite
 from re import fullmatch
 from typing import TypeGuard
 
-from .models import Observation
+from .models import MediaWireDiagnostics, Observation, WireFieldShape
 
 _PLAYER_STATES = frozenset({"IDLE", "PLAYING", "PAUSED", "BUFFERING", "LOADING"})
 _IDLE_REASONS = frozenset({"CANCELLED", "INTERRUPTED", "FINISHED", "ERROR"})
@@ -71,6 +72,66 @@ def _pause_supported(status: object) -> bool | None:
     return bool(commands & 1) if commands is not None and commands >= 0 else None
 
 
+def _field_shape(parent: object, name: str, valid: Callable[[object], bool]) -> WireFieldShape:
+    if not _is_object(parent):
+        return "unavailable"
+    if name not in parent:
+        return "absent"
+    value = parent[name]
+    if value is None:
+        return "null"
+    return "valid" if valid(value) else "invalid"
+
+
+def _wire_diagnostics(statuses: object) -> MediaWireDiagnostics:
+    """Describe known wire fields without retaining their private payloads.
+
+    These are shapes, not evidence: an empty object is a valid object; an absent
+    breakStatus does not prove inactive ads. Parent absence/invalidity makes its
+    child unavailable. The first status remains the normalization input.
+    """
+    status = _first(statuses)
+    media = _field(status, "media")
+    extended = _field(status, "extendedStatus")
+    extended_media = _field(extended, "media")
+    ad = _field(status, "breakStatus")
+
+    def text(value: object) -> bool:
+        return _text(value) is not None
+
+    def seconds(value: object) -> bool:
+        return _seconds(value) is not None
+
+    def identifier(value: object) -> bool:
+        parsed = _integer(value)
+        return parsed is not None and parsed >= 0
+
+    def array(value: object) -> bool:
+        return isinstance(value, list)
+
+    return {
+        "wire_status_count": len(statuses) if isinstance(statuses, list) else None,
+        "wire_media": _field_shape(status, "media", _is_object),
+        "wire_media_content_id": _field_shape(media, "contentId", text),
+        "wire_extended_status": _field_shape(status, "extendedStatus", _is_object),
+        "wire_extended_media": _field_shape(extended, "media", _is_object),
+        "wire_extended_content_id": _field_shape(extended_media, "contentId", text),
+        "wire_break_status": _field_shape(status, "breakStatus", _is_object),
+        "wire_break_id": _field_shape(ad, "breakId", text),
+        "wire_break_clip_id": _field_shape(ad, "breakClipId", text),
+        "wire_break_time": _field_shape(ad, "currentBreakTime", seconds),
+        "wire_break_clip_time": _field_shape(ad, "currentBreakClipTime", seconds),
+        "wire_status_custom_data": _field_shape(status, "customData", _is_object),
+        "wire_media_custom_data": _field_shape(media, "customData", _is_object),
+        "wire_extended_media_custom_data": _field_shape(extended_media, "customData", _is_object),
+        "wire_media_breaks": _field_shape(media, "breaks", array),
+        "wire_media_break_clips": _field_shape(media, "breakClips", array),
+        "wire_current_item_id": _field_shape(status, "currentItemId", identifier),
+        "wire_loading_item_id": _field_shape(status, "loadingItemId", identifier),
+        "wire_preloaded_item_id": _field_shape(status, "preloadedItemId", identifier),
+    }
+
+
 def media_observation(data: object) -> Observation:
     """Extract the first media status, preserving missing or invalid fields."""
     statuses = _field(data, "status")
@@ -94,6 +155,7 @@ def media_observation(data: object) -> Observation:
         "idle_reason": _choice(_field(status, "idleReason"), _IDLE_REASONS),
         "ad_break": _ad_break(status),
         "pause_supported": _pause_supported(status),
+        **_wire_diagnostics(statuses),
     }
 
 
