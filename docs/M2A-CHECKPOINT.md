@@ -1,9 +1,10 @@
 # M2a checkpoint and repair acceptance
 
-Updated 2026-09-21. **M2a remains blocked after the live checkpoint on `7a08929`.**
-The first M2 batch is merged. Its offline checks passed, but the live session did
-not verify pause/resume or establish a sufficient completion signal. No automatic
-queue advancement was attempted or enabled.
+Updated 2026-09-21. **M2a's controls gate passed on `e4b2a91`; completion remains
+unverified.** The first checkpoint's failed attempts remain in the ledger below.
+After the repair batch merged, one live diagnostic verified pause/resume and
+cleanup stop. The user separately confirmed seeing the pause. No automatic queue
+advancement was attempted or enabled.
 
 ## Tested baseline
 
@@ -24,7 +25,7 @@ was used. User confirmation of visible playback was not received for these runs.
 Device identity, addresses, raw traces and command records remain in ignored
 `runtime/`; this document records only reviewed outcomes.
 
-## Live outcomes
+## First checkpoint live outcomes (`7a08929`)
 
 | Run | Requested-title ending candidate | Pause/resume evidence | Capture limitation |
 | --- | --- | --- | --- |
@@ -45,7 +46,8 @@ an ending; the content history and observation boundaries also matter.
 
 The pause journal's initial UNKNOWN outcome records intent before dispatch. It is
 not the final outcome: A3 ended with REJECTED. Receiver-advertised pause support
-has not been verified through an observed live pause/resume pair.
+had not yet been verified through an observed live pause/resume pair at this
+checkpoint. The repaired run below subsequently passed that gate.
 
 An offline reproduction also found that a queued startup reset from before the
 current control boundary rejects an otherwise valid pause. An identical synthetic
@@ -94,20 +96,99 @@ that mistook year digits in a random pseudonym for leaked timestamps. Both branc
 now check timestamp fields and relative offsets directly, with a deterministic
 regression for a harmless pseudonym containing those digits.
 
-These are offline repair results. The historical A3 rejection remains unattributed,
-and the repaired controls have not yet passed live pause/resume. New wire-field
-shapes do not establish completion support by themselves.
+These are offline repair results. The historical A3 rejection remains unattributed.
+New wire-field shapes do not establish completion support by themselves.
 
-## Next live checkpoint
+## Repaired live diagnostic (`e4b2a91`)
 
-After repair PRs merge, first run one explicitly requested short diagnostic with
-the new wire-field shapes and control provenance. Use a fresh exact-title launch,
-qualified pause/resume attempt, natural terminal observation and subsequent-content
-window. Inspect the trace before scheduling more identical runs. If no supported
-source supplies sufficient content/ad evidence, record the current route's
-limitation and stop the completion experiment; keep M2a blocked. Shape availability
-alone does not establish field semantics. See the bounded diagnostic in the
-[lifecycle notes](M2-LIFECYCLE.md).
+The repair PRs merged, and actual `main` at `e4b2a91` passed **531 offline tests**.
+One requested diagnostic then launched title A from an idle receiver, after the
+passive observer signaled readiness. A persistent controller kept the launch,
+pause, resume and fresh status observations on one connection. Existing local
+queue/session files remained unchanged.
+
+| Gate | Observed result |
+| --- | --- |
+| Guarded pause | ACCEPTED with receiver/media-status provenance, followed by fresh owned PAUSED and `control_observed=true` |
+| Guarded resume | After a 20-second pause hold, ACCEPTED followed by fresh owned PLAYING and `control_observed=true` |
+| Progress after resume | Same-owned status advanced from 17.405 to 23.5 seconds |
+| Visible pause | User confirmed: “Yes, I saw it pause.” |
+| Natural terminal | One FINISHED candidate; terminal content and ad state remained unknown |
+| Cleanup | Guarded stop accepted and receiver app exit verified through telemetry |
+| Capture integrity | Normal 240-second budget ending, end record present, no partial windows; sanitize/replay/inspect passed |
+
+Visible resume, natural completion and cleanup were not separately confirmed. The
+strict evidence reason stayed `ad_unknown`; verified controls do not manufacture
+inactive-ad evidence. No capture/controller tool session remained running.
+
+The 119 media observations showed object-shaped status custom data throughout,
+including the terminal. Primary media custom data was object-shaped in the 109
+exact-title playback observations and unavailable in ten terminal/empty ones.
+Terminal primary media, extended status, break status and queue-item IDs were
+absent. Shapes cannot tell us whether the custom data was empty or meaningful.
+
+Duration was already present during playback: **112.901 or 113.0 seconds** for
+the requested NASA title. The last exact-title position was 112.777 seconds; the
+terminal supplied neither duration nor identity. These are diagnostic context,
+not a time-based completion decision. The [metadata investigation](YOUTUBE-METADATA.md)
+separates documented semantics, library caching and observed fields.
+
+## Metadata diagnostic and remaining acceptance
+
+The repaired diagnostic narrowed the next step to provider custom data. The first
+scoped metadata run used observer `61b839e` with the unchanged `e4b2a91` controller.
+Its 200-second capture ended normally with 90 media samples, zero dropped samples
+and no structural truncation. Of those, 83 identified the requested title and seven
+omitted identity; none identified other content. One FINISHED candidate omitted
+identity and duration, retained position 112.901, and matched the immediately
+preceding media-session ID. Ad state remained unknown. No visual confirmation was
+requested for this run. Guarded cleanup was accepted and verified `stop_observed`;
+legacy queue/session hashes remained unchanged.
+
+All 90 status custom-data objects contained one numeric `playerState` field. The
+83 media custom-data objects contained numeric `currentIndex` and string `listId`;
+the remaining seven were unavailable. No other keys appeared. The schema capture
+saved names/types only, so it cannot retrospectively supply their values. The
+reviewed field names are protocol vocabulary; playlist identifiers remain private.
+
+YouTube's own public remote-player implementation reads the exact custom-state
+path and distinguishes ad-specific numeric states. This justifies a narrow numeric
+diagnostic, not a production ad mapping. The [research note](YOUTUBE-METADATA.md#a-concrete-provider-state-lead)
+pins the source build and separates direct source behavior from inference.
+
+The follow-up observer at `3a60058` retained the selected numeric field while the
+controller stayed on `e4b2a91`. It observed -1 during startup, 3 with BUFFERING,
+1 with PLAYING, and **0 in the anonymous IDLE / FINISHED message**. The next sample
+reported the requested title at position zero with BUFFERING and code 5, using
+the same media-session ID. Code 5 remains uninterpreted. No 108x ad-specific code
+was observed; ad behavior is therefore still unvalidated. These findings identify
+a concrete source-backed candidate for further interpretation, not M2a acceptance.
+
+The numeric capture ended normally at its 200-second budget: **93 samples**, zero
+drops, no structural truncation, 87 requested-title and six anonymous observations,
+and no other content. Code counts were -1: 4, 3: 4, 1: 59, 0: 1 and 5: 25. Every
+selected numeric field was valid; all 93 normalized ad states remained unknown.
+There was no new visual confirmation. Existing queue/session hashes were unchanged.
+Guarded cleanup accepted stop and verified `stop_observed` after fresh BUFFERING.
+Both runs' capture, launch and cleanup tool processes exited normally.
+
+Diagnostic code `3a60058` ([PR #18](https://github.com/lbliii/tellyq/pull/18)) passed
+**566 tests**, **93.3% coverage**, lint, formatting, ty, source/wheel builds,
+isolated installation and macOS/Linux CI. These checks validate diagnostic
+implementation, not a new completion capability. This batch consisted of two
+scoped live runs: schema discovery followed by a targeted numeric probe.
+
+Evaluate ordered content history under Cast's incremental-update contract; the
+media-session ID alone is insufficient. A source-qualified ad rule could be
+legitimate without a literal false boolean, but the existing gate is unchanged
+in this batch.
+
+The next batch should review a finite YouTube-specific state interpretation and
+ordered content attribution using the pinned source and observations. It needs
+offline cases for unknown/invalid codes, ads, conflicting fields, reused IDs,
+replacement, gaps and reconnects before a policy change and full live acceptance.
+Schema-only capture has answered its question; do not repeat it. The decision and
+bounded fallback are in the [metadata investigation](YOUTUBE-METADATA.md#decision-and-bounded-next-work).
 
 Once a supported evidence route exists, the full acceptance set must:
 
