@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from tellyq.application import PlaybackApplication
+from tellyq.application import ControlRefused, PlaybackApplication
 from tellyq.cast_backend import CastBackend
 from tellyq.cast_messages import normalize_message
 from tellyq.controller import execute
@@ -14,6 +14,10 @@ from tellyq.domain.values import (
     CommandAction,
     CommandOutcome,
     ContentRef,
+    ControlDiagnostic,
+    ControlReason,
+    ControlResponse,
+    ControlStage,
     PlaybackRequest,
     PlaybackTarget,
     PlayerState,
@@ -129,6 +133,110 @@ def test_bad_ownership_refuses_controls(system, change):
     with pytest.raises(ValueError):
         app.pause(request, owned)
     assert not transport.controls
+
+
+@pytest.mark.parametrize("offset,allowed", [(-0.1, True), (0.0, False), (0.05, False)])
+def test_new_client_reset_is_only_reconcilable_before_control_boundary(
+    system, offset, allowed, monkeypatch
+):
+    clock, request, _, _, store, _, owned = system
+    transport = ControlTransport(clock)
+    transport.playing = True
+    transport.ad = None
+    observe = transport.observe
+    boundary = clock.monotonic()
+    first = True
+
+    def queued(seconds):
+        nonlocal first
+        events = observe(seconds)
+        if first:
+            first = False
+            events.insert(
+                0, {"kind": "error", "type": "CONNECTION_RESET", "monotonic": boundary + offset}
+            )
+        return events
+
+    monkeypatch.setattr(transport, "observe", queued)
+    app = PlaybackApplication(CastBackend(transport, request.target, clock), store, clock)
+    if allowed:
+        result = app.pause(request, owned)
+        assert result.control_observed
+        assert result.snapshot is not None and result.snapshot.latest is not None
+        assert result.snapshot.scope.connection_generation != owned.scope.connection_generation
+        assert result.snapshot.latest.ad_active is None
+        assert not result.snapshot.evidence.receiver_playback_confirmed
+        assert len(transport.controls) == 1 and transport.plays == []
+    else:
+        with pytest.raises(ControlRefused) as raised:
+            app.pause(request, owned)
+        assert raised.value.diagnostic.reason == ControlReason.CONNECTION_CHANGED
+        assert not transport.controls
+
+
+@pytest.mark.parametrize("change", ["session", "content", "missing", "stale", "no_receiver"])
+def test_preboundary_reset_still_requires_fresh_exact_ownership(system, change, monkeypatch):
+    clock, request, _, _, store, _, owned = system
+    transport = ControlTransport(clock)
+    transport.playing = True
+    observe = transport.observe
+    boundary = clock.monotonic()
+    if change == "session":
+        transport.session = "replacement"
+    if change == "content":
+        transport.content = "replacement-video"
+    if change == "missing":
+        transport.media = False
+
+    def queued(seconds):
+        events = observe(seconds)
+        if change == "stale":
+            clock.tick(20)
+        if change == "no_receiver":
+            events = [event for event in events if event["kind"] != "receiver"]
+        return [{"kind": "error", "type": "CONNECTION_RESET", "monotonic": boundary - 0.1}, *events]
+
+    monkeypatch.setattr(transport, "observe", queued)
+    app = PlaybackApplication(CastBackend(transport, request.target, clock), store, clock)
+    with pytest.raises(ControlRefused):
+        app.pause(request, owned)
+    assert not transport.controls
+
+
+@pytest.mark.parametrize("timing", ["aged_during_observation", "future", "out_of_order"])
+def test_reset_after_boundary_is_not_excused_by_freshness_or_event_order(system, timing):
+    clock, request, transport, backend, _, app, owned = system
+    observe = backend.observe
+    boundary = clock.monotonic()
+
+    def changed(target):
+        events = observe(target)
+        instant = clock.monotonic() + 1 if timing == "future" else boundary + 0.05
+        reset = replace(events[0], connection_reset=True, monotonic=instant)
+        if timing == "aged_during_observation":
+            clock.tick(10)
+        return (*events, reset)
+
+    backend.observe = changed
+    with pytest.raises(ControlRefused) as raised:
+        app.pause(request, owned)
+    assert raised.value.diagnostic == ControlDiagnostic(
+        ControlStage.APPLICATION, ControlReason.CONNECTION_CHANGED
+    )
+    assert not transport.controls
+
+
+def test_buffering_is_an_application_refusal_without_command_intent(system):
+    _, request, transport, _, _, app, owned = system
+    transport.state = "BUFFERING"
+    app.on_receipt = Mock()
+    with pytest.raises(ControlRefused) as raised:
+        app.pause(request, owned)
+    assert raised.value.diagnostic == ControlDiagnostic(
+        ControlStage.APPLICATION, ControlReason.STATE_MISMATCH
+    )
+    assert not transport.controls
+    app.on_receipt.assert_not_called()
 
 
 def test_unknown_ad_does_not_prevent_owned_controls_or_turn_into_no_ad(system):
@@ -272,7 +380,11 @@ def test_direct_adapter_controls_refuse_retired_media_cache(system):
 
 def test_direct_adapter_controls_refuse_changed_media_id(system):
     _, _, transport, backend, _, _, owned = system
-    assert backend.pause(owned.scope, "other-media").outcome == CommandOutcome.REJECTED
+    receipt = backend.pause(owned.scope, "other-media")
+    assert receipt.outcome == CommandOutcome.REJECTED
+    assert receipt.diagnostic == ControlDiagnostic(
+        ControlStage.BACKEND, ControlReason.IDENTITY_CHANGED
+    )
     assert not transport.controls
 
 
@@ -316,7 +428,84 @@ def test_controller_unknown_support_rejects_without_control_effect(tmp_path):
     assert code == 1 and report["commands"][0]["outcome"] == "rejected"
     assert report["error"]["type"] == "CommandRejected"
     assert report["control_observed"] is False
+    assert report["commands"][0]["diagnostic"] == {
+        "stage": "application",
+        "reason": "capability_unavailable",
+    }
     assert transport.controls == []
+
+
+@pytest.mark.parametrize(
+    "stage,reason,outcome",
+    [
+        (ControlStage.TRANSPORT_GUARD, ControlReason.STATE_MISMATCH, CommandOutcome.REJECTED),
+        (ControlStage.RECEIVER, ControlReason.INVALID_REQUEST, CommandOutcome.REJECTED),
+        (ControlStage.RECEIVER, ControlReason.INVALID_PLAYER_STATE, CommandOutcome.REJECTED),
+        (ControlStage.TRANSPORT, ControlReason.TRANSPORT_EXCEPTION, CommandOutcome.UNKNOWN),
+        (ControlStage.TRANSPORT, ControlReason.RESPONSE_UNKNOWN, CommandOutcome.UNKNOWN),
+    ],
+)
+def test_typed_transport_provenance_survives_receipt_and_cli(
+    tmp_path, stage, reason, outcome, monkeypatch
+):
+    clock = FakeClock()
+    transport = ControlTransport(clock)
+    device = "00000000-0000-4000-8000-000000000001"
+
+    @contextmanager
+    def factory(target, clock, seconds):
+        yield CastBackend(transport, target, clock, seconds), {"uuid": device, "name": "synthetic"}
+
+    def run(command, **kwargs):
+        return execute(command, tmp_path, clock=clock, backend_factory=factory, **kwargs)
+
+    assert run("queue", device_id=device)[1] == 0
+    assert run("start")[1] == 0
+    diagnostic = ControlDiagnostic(stage, reason)
+    monkeypatch.setattr(transport, "control", lambda *_: ControlResponse(outcome, diagnostic))
+    report, code = run("pause")
+    assert code == 1 and not report["control_observed"]
+    assert report["commands"][0]["outcome"] == outcome
+    assert report["commands"][0]["diagnostic"] == {"stage": stage, "reason": reason}
+    assert report["error"]["diagnostic"] == report["commands"][0]["diagnostic"]
+
+
+def test_application_guard_provenance_survives_cli_without_a_command(tmp_path):
+    clock = FakeClock()
+    transport = ControlTransport(clock)
+    device = "00000000-0000-4000-8000-000000000001"
+
+    @contextmanager
+    def factory(target, clock, seconds):
+        yield CastBackend(transport, target, clock, seconds), {"uuid": device, "name": "synthetic"}
+
+    def run(command, **kwargs):
+        return execute(command, tmp_path, clock=clock, backend_factory=factory, **kwargs)
+
+    run("queue", device_id=device)
+    run("start")
+    transport.state = "BUFFERING"
+    report, code = run("pause")
+    assert code == 1 and report["commands"] == []
+    assert report["error"]["diagnostic"] == {"stage": "application", "reason": "state_mismatch"}
+    assert transport.controls == []
+
+
+@pytest.mark.parametrize("action", [CommandAction.START, CommandAction.STOP])
+def test_noncontrol_receipt_json_shape_is_unchanged(action):
+    from tellyq.controller import _wire_receipt
+    from tellyq.domain.values import CommandReceipt
+
+    receipt = CommandReceipt(
+        "request", "attempt", action, CommandOutcome.ACCEPTED, FakeClock().utcnow()
+    )
+    assert set(_wire_receipt(receipt)) == {
+        "action",
+        "requested_at",
+        "recorded_at",
+        "returned",
+        "outcome",
+    }
 
 
 def test_control_snapshot_conflict_is_checked_before_device_effect(system):

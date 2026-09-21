@@ -15,6 +15,10 @@ from .domain.values import (
     CommandOutcome,
     CommandReceipt,
     ContentRef,
+    ControlDiagnostic,
+    ControlReason,
+    ControlResponse,
+    ControlStage,
     ErrorCode,
     IdleReason,
     PlaybackCapabilities,
@@ -67,7 +71,7 @@ class CastTransport(Protocol):
 class CastControls(Protocol):
     def control(
         self, scope: PlaybackScope, playback_id: str, action: CommandAction
-    ) -> bool | None: ...
+    ) -> ControlResponse | bool | None: ...
 
 
 class CastBackend:
@@ -138,30 +142,30 @@ class CastBackend:
     def resume(self, scope: PlaybackScope, playback_id: str) -> CommandReceipt:
         return self._control(scope, playback_id, CommandAction.RESUME)
 
-    def _control(
+    def _control_guard(
         self, scope: PlaybackScope, playback_id: str, action: CommandAction
-    ) -> CommandReceipt:
-        self._target(scope.request.target)
+    ) -> ControlReason | None:
         receiver, media = self._receiver, self._media
         now = self.clock.monotonic()
         expected = PlayerState.PLAYING if action == CommandAction.PAUSE else PlayerState.PAUSED
+        if not self._allows_effects():
+            return ControlReason.READ_ONLY
+        if not isinstance(self.transport, CastControls):
+            return ControlReason.CAPABILITY_UNAVAILABLE
+        if receiver is None or media is None:
+            return ControlReason.MEDIA_UNAVAILABLE
         if (
-            not self._allows_effects()
-            or not isinstance(self.transport, CastControls)
-            or receiver is None
-            or media is None
-            or scope.connection_generation != self.generation
+            scope.connection_generation != self.generation
             or media.connection_generation != self.generation
-            or receiver.get("app_id") != scope.application_id
+        ):
+            return ControlReason.CONNECTION_CHANGED
+        if (
+            receiver.get("app_id") != scope.application_id
             or receiver.get("app_session_id") != scope.session_id
             or media.application_id != scope.application_id
             or media.session_id != scope.session_id
             or media.content != scope.request.content
             or media.playback_id != playback_id
-            or media.state != expected
-            or media.pause_supported is not True
-            or not 0 <= now - media.monotonic <= 5
-            or not 0 <= now - receiver.get("monotonic", float("-inf")) <= 5
             or any(
                 event.monotonic > scope.started_monotonic
                 and (
@@ -175,31 +179,66 @@ class CastBackend:
                 for event in self._identity_history
             )
         ):
-            return self._receipt(scope.request, action, CommandOutcome.REJECTED)
+            return ControlReason.IDENTITY_CHANGED
+        if media.state != expected:
+            return ControlReason.STATE_MISMATCH
+        if media.pause_supported is not True:
+            return ControlReason.CAPABILITY_UNAVAILABLE
+        if (
+            not 0 <= now - media.monotonic <= 5
+            or not 0 <= now - receiver.get("monotonic", float("-inf")) <= 5
+        ):
+            return ControlReason.STALE_OBSERVATION
+        return None
+
+    def _control(
+        self, scope: PlaybackScope, playback_id: str, action: CommandAction
+    ) -> CommandReceipt:
+        self._target(scope.request.target)
+        reason = self._control_guard(scope, playback_id, action)
+        if reason is not None:
+            return self._control_receipt(
+                scope,
+                action,
+                ControlResponse(
+                    CommandOutcome.REJECTED, ControlDiagnostic(ControlStage.BACKEND, reason)
+                ),
+            )
+        assert isinstance(self.transport, CastControls)
         self._window = 6
         try:
-            accepted = self.transport.control(scope, playback_id, action)
+            result = self.transport.control(scope, playback_id, action)
         except Exception, KeyboardInterrupt:
+            result = ControlResponse(
+                CommandOutcome.UNKNOWN,
+                ControlDiagnostic(ControlStage.TRANSPORT, ControlReason.TRANSPORT_EXCEPTION),
+            )
+        if not isinstance(result, ControlResponse):
+            # Compatibility with adapters predating provenance: a boolean does
+            # not establish whether a refusal was local or came from a receiver.
+            result = ControlResponse(
+                CommandOutcome.ACCEPTED
+                if result is True
+                else (CommandOutcome.REJECTED if result is False else CommandOutcome.UNKNOWN),
+                ControlDiagnostic(ControlStage.TRANSPORT, ControlReason.LEGACY_RESULT),
+            )
+        return self._control_receipt(scope, action, result)
+
+    def _control_receipt(
+        self, scope: PlaybackScope, action: CommandAction, response: ControlResponse
+    ) -> CommandReceipt:
+        error = None
+        if response.outcome != CommandOutcome.ACCEPTED:
+            uncertain = response.outcome == CommandOutcome.UNKNOWN
             error = PlaybackError(
-                ErrorCode.COMMAND_OUTCOME_UNKNOWN,
-                "Cast media control outcome is unknown.",
+                ErrorCode.COMMAND_OUTCOME_UNKNOWN if uncertain else ErrorCode.CONTROL_REJECTED,
+                f"Cast media control {'outcome unknown' if uncertain else 'refused'} at "
+                f"{response.diagnostic.stage.value}: {response.diagnostic.reason.value}.",
                 scope.request.request_id,
-                True,
+                uncertain,
                 "Inspect fresh status before retrying.",
             )
-            return self._receipt(scope.request, action, CommandOutcome.UNKNOWN, error)
-        if accepted is None:
-            error = PlaybackError(
-                ErrorCode.COMMAND_OUTCOME_UNKNOWN,
-                "Cast media control response is inconclusive.",
-                scope.request.request_id,
-                True,
-                "Inspect fresh status before retrying.",
-            )
-            return self._receipt(scope.request, action, CommandOutcome.UNKNOWN, error)
-        return self._receipt(
-            scope.request, action, CommandOutcome.ACCEPTED if accepted else CommandOutcome.REJECTED
-        )
+        return self._receipt(scope.request, action, response.outcome, error, response.diagnostic)
 
     def _receipt(
         self,
@@ -207,9 +246,16 @@ class CastBackend:
         action: CommandAction,
         outcome: CommandOutcome,
         error: PlaybackError | None = None,
+        diagnostic: ControlDiagnostic | None = None,
     ) -> CommandReceipt:
         return CommandReceipt(
-            request.request_id, request.attempt_id, action, outcome, self.clock.utcnow(), error
+            request.request_id,
+            request.attempt_id,
+            action,
+            outcome,
+            self.clock.utcnow(),
+            error,
+            diagnostic=diagnostic,
         )
 
     def start(self, request: PlaybackRequest) -> CommandReceipt:
@@ -443,7 +489,9 @@ class _Transport:
     def quit(self) -> None:
         self.connection.cast.quit_app(timeout=10)
 
-    def control(self, scope: PlaybackScope, playback_id: str, action: CommandAction) -> bool | None:
+    def control(
+        self, scope: PlaybackScope, playback_id: str, action: CommandAction
+    ) -> ControlResponse:
         return self.connection.control(scope, playback_id, action)
 
 

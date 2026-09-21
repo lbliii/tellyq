@@ -13,6 +13,7 @@ import pychromecast
 from pychromecast.controllers import BaseController
 from pychromecast.controllers.receiver import ReceiverController
 from pychromecast.controllers.youtube import YouTubeController
+from pychromecast.error import RequestFailed, RequestTimeout
 from pychromecast.models import CastInfo
 from pychromecast.response_handler import WaitResponse
 from pychromecast.socket_client import ConnectionStatus, ConnectionStatusListener
@@ -20,7 +21,15 @@ from zeroconf import Zeroconf
 
 from .cast_messages import media_observation as media_observation
 from .cast_messages import normalize_message
-from .domain.values import CommandAction, PlaybackScope
+from .domain.values import (
+    CommandAction,
+    CommandOutcome,
+    ControlDiagnostic,
+    ControlReason,
+    ControlResponse,
+    ControlStage,
+    PlaybackScope,
+)
 from .models import Device, Observation
 
 MEDIA = "urn:x-cast:com.google.cast.media"
@@ -182,42 +191,91 @@ class Connection:
         self.youtube = YouTubeController(timeout=10)
         self.cast.register_handler(self.youtube)
 
-    def control(self, scope: PlaybackScope, playback_id: str, action: CommandAction) -> bool | None:
+    def control(
+        self, scope: PlaybackScope, playback_id: str, action: CommandAction
+    ) -> ControlResponse:
         """Pin all remote identities instead of following a mutable current session."""
         from .cast_backend import video_id
 
         receiver = self.cast.status
         media = self.cast.media_controller.status
-        if (
-            action not in {CommandAction.PAUSE, CommandAction.RESUME}
-            or receiver is None
-            or receiver.app_id != scope.application_id
-            or receiver.session_id != scope.session_id
-            or not receiver.transport_id
-            or str(media.media_session_id) != playback_id
+        reason = None
+        if action not in {CommandAction.PAUSE, CommandAction.RESUME}:
+            reason = ControlReason.ACTION_UNSUPPORTED
+        elif receiver is None:
+            reason = ControlReason.OWNERSHIP_UNVERIFIED
+        elif receiver.app_id != scope.application_id or receiver.session_id != scope.session_id:
+            reason = ControlReason.IDENTITY_CHANGED
+        elif not receiver.transport_id:
+            reason = ControlReason.DESTINATION_UNAVAILABLE
+        elif (
+            str(media.media_session_id) != playback_id
             or video_id(media.content_id) != scope.request.content.content_id
-            or not media.supports_pause
-            or media.player_state != ("PLAYING" if action == CommandAction.PAUSE else "PAUSED")
         ):
-            return False
+            reason = ControlReason.IDENTITY_CHANGED
+        elif not media.supports_pause:
+            reason = ControlReason.CAPABILITY_UNAVAILABLE
+        elif media.player_state != ("PLAYING" if action == CommandAction.PAUSE else "PAUSED"):
+            reason = ControlReason.STATE_MISMATCH
+        if reason is not None:
+            return ControlResponse(
+                CommandOutcome.REJECTED, ControlDiagnostic(ControlStage.TRANSPORT_GUARD, reason)
+            )
+        assert receiver is not None and receiver.transport_id
+        try:
+            media_id = int(playback_id)
+        except ValueError:
+            return ControlResponse(
+                CommandOutcome.REJECTED,
+                ControlDiagnostic(ControlStage.TRANSPORT_GUARD, ControlReason.INVALID_MEDIA_ID),
+            )
         response = WaitResponse(10, action.value)
-        self.cast.socket_client.send_message(
-            receiver.transport_id,
-            MEDIA,
-            {
-                "type": "PAUSE" if action == CommandAction.PAUSE else "PLAY",
-                "sessionId": scope.session_id,
-                "mediaSessionId": int(playback_id),
-            },
-            callback_function=response.callback,
-        )
-        response.wait_response()
+        try:
+            self.cast.socket_client.send_message(
+                receiver.transport_id,
+                MEDIA,
+                {
+                    "type": "PAUSE" if action == CommandAction.PAUSE else "PLAY",
+                    "sessionId": scope.session_id,
+                    "mediaSessionId": media_id,
+                },
+                callback_function=response.callback,
+            )
+            response.wait_response()
+        except (Exception, KeyboardInterrupt) as exc:
+            reason = (
+                ControlReason.RESPONSE_TIMEOUT
+                if isinstance(exc, RequestTimeout)
+                else ControlReason.MESSAGE_NOT_SENT
+                if isinstance(exc, RequestFailed)
+                else ControlReason.TRANSPORT_EXCEPTION
+            )
+            return ControlResponse(
+                CommandOutcome.UNKNOWN,
+                ControlDiagnostic(ControlStage.TRANSPORT, reason),
+            )
         reply = response.response
-        if reply is not None and reply.get("type") == "MEDIA_STATUS":
-            return True
-        if reply is not None and reply.get("type") in {"INVALID_REQUEST", "INVALID_PLAYER_STATE"}:
-            return False
-        return None
+        reply_type = reply.get("type") if isinstance(reply, dict) else None
+        reason = (
+            {
+                "MEDIA_STATUS": ControlReason.MEDIA_STATUS,
+                "INVALID_REQUEST": ControlReason.INVALID_REQUEST,
+                "INVALID_PLAYER_STATE": ControlReason.INVALID_PLAYER_STATE,
+            }.get(reply_type)
+            if isinstance(reply_type, str)
+            else None
+        )
+        if reason is not None:
+            return ControlResponse(
+                CommandOutcome.ACCEPTED
+                if reason == ControlReason.MEDIA_STATUS
+                else CommandOutcome.REJECTED,
+                ControlDiagnostic(ControlStage.RECEIVER, reason),
+            )
+        return ControlResponse(
+            CommandOutcome.UNKNOWN,
+            ControlDiagnostic(ControlStage.TRANSPORT, ControlReason.RESPONSE_UNKNOWN),
+        )
 
     def drain(self) -> list[Observation]:
         result: list[Observation] = []

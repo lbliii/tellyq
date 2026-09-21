@@ -52,12 +52,18 @@ class Evidence(TypedDict):
     reason: NotRequired[str]
 
 
+class ControlDiagnostic(TypedDict):
+    stage: str
+    reason: str
+
+
 class CommandReceipt(TypedDict):
     action: str
     requested_at: str
     recorded_at: NotRequired[str]
     returned: bool
     outcome: NotRequired[str]
+    diagnostic: NotRequired[ControlDiagnostic]
 
 
 class QueueItem(TypedDict):
@@ -80,6 +86,7 @@ class QueueDocument(TypedDict):
 class Error(TypedDict):
     type: str
     message: str
+    diagnostic: NotRequired[ControlDiagnostic]
 
 
 class Report(TypedDict, total=False):

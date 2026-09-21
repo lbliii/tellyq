@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
-from .application import PlaybackApplication, PlaybackResult
+from .application import ControlRefused, PlaybackApplication, PlaybackResult
 from .clock import SystemClock
 from .domain.ports import Clock, PlaybackBackend, SessionStore
 from .domain.values import (
@@ -41,7 +41,7 @@ class WireObservations(Protocol):
 
 
 def _wire_receipt(receipt: CommandReceipt) -> WireReceipt:
-    return {
+    result: WireReceipt = {
         "action": {"start": "play_video", "stop": "quit_app"}.get(
             receipt.action.value, receipt.action.value
         ),
@@ -50,6 +50,12 @@ def _wire_receipt(receipt: CommandReceipt) -> WireReceipt:
         "returned": receipt.outcome == CommandOutcome.ACCEPTED,
         "outcome": receipt.outcome.value,
     }
+    if receipt.diagnostic is not None:
+        result["diagnostic"] = {
+            "stage": receipt.diagnostic.stage.value,
+            "reason": receipt.diagnostic.reason.value,
+        }
+    return result
 
 
 def _observations(result: PlaybackResult) -> list[Observation]:
@@ -136,6 +142,11 @@ def _result_report(report: Report, result: PlaybackResult, clock: Clock) -> int:
                 if receipt.error
                 else "The backend refused this command.",
             }
+            if receipt.diagnostic is not None:
+                report["error"]["diagnostic"] = {
+                    "stage": receipt.diagnostic.stage.value,
+                    "reason": receipt.diagnostic.reason.value,
+                }
             return 1
     if result.failure is not None:
         report["error"] = {
@@ -353,6 +364,12 @@ def execute(
                 if device_io
                 else str(exc),
             }
+            if isinstance(exc, ControlRefused):
+                report["error"]["message"] = str(exc)
+                report["error"]["diagnostic"] = {
+                    "stage": exc.diagnostic.stage.value,
+                    "reason": exc.diagnostic.reason.value,
+                }
             report.setdefault(
                 "state", "unconfirmed" if update_queue or report["commands"] else "failed"
             )

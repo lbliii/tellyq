@@ -9,6 +9,9 @@ from .domain.values import (
     CommandAction,
     CommandOutcome,
     CommandReceipt,
+    ControlDiagnostic,
+    ControlReason,
+    ControlStage,
     ErrorCode,
     EvidenceReason,
     PlaybackError,
@@ -19,6 +22,14 @@ from .domain.values import (
     SessionSnapshot,
     Support,
 )
+
+
+class ControlRefused(ValueError):
+    """A safe application guard failure before command intent or dispatch."""
+
+    def __init__(self, reason: ControlReason) -> None:
+        self.diagnostic = ControlDiagnostic(ControlStage.APPLICATION, reason)
+        super().__init__(f"Media control refused by application: {reason.value}.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,26 +257,40 @@ class PlaybackApplication:
         self, request: PlaybackRequest, owned: SessionSnapshot | None, action: CommandAction
     ) -> PlaybackResult:
         if owned is None or owned.stop_requested or owned.ownership_lost:
-            raise ValueError("No active playback ownership; refusing media control.")
+            raise ControlRefused(ControlReason.OWNERSHIP_UNVERIFIED)
         revision = self._revision(owned)
         boundary = self.clock.monotonic()
         baseline = self.backend.observe(request.target)
-        if any(event.connection_reset for event in baseline):
-            raise ValueError("Connection changed during observation; inspect fresh status.")
-        snapshot = self._reconcile(request, owned, boundary, baseline)
+        # A newly opened client may still have a startup reset queued before this
+        # command. Fresh ownership must be re-established below; only resets
+        # strictly before the boundary may be reconciled this way. Do not use the
+        # five-second freshness limit here: any reset during this window blocks.
+        if any(
+            event.connection_reset
+            and event.target == request.target
+            and event.monotonic >= boundary
+            for event in baseline
+        ):
+            raise ControlRefused(ControlReason.CONNECTION_CHANGED)
+        try:
+            snapshot = self._reconcile(request, owned, boundary, baseline)
+        except ValueError as exc:
+            raise ControlRefused(ControlReason.OWNERSHIP_UNVERIFIED) from exc
         media = snapshot.latest
         expected = PlayerState.PLAYING if action == CommandAction.PAUSE else PlayerState.PAUSED
+        if media is None or media.playback_id is None:
+            raise ControlRefused(ControlReason.MEDIA_UNAVAILABLE)
+        if not self._fresh(media, request, boundary):
+            raise ControlRefused(ControlReason.STALE_OBSERVATION)
         if (
-            media is None
-            or not self._fresh(media, request, boundary)
-            or media.content != request.content
+            media.content != request.content
             or media.connection_generation != snapshot.scope.connection_generation
             or media.session_id != snapshot.scope.session_id
             or media.application_id != snapshot.scope.application_id
-            or media.playback_id is None
-            or media.state != expected
         ):
-            raise ValueError("No fresh owned media in the required state; inspect status.")
+            raise ControlRefused(ControlReason.IDENTITY_CHANGED)
+        if media.state != expected:
+            raise ControlRefused(ControlReason.STATE_MISMATCH)
         capabilities = self.backend.capabilities(request.target)
         capability = capabilities.pause if action == CommandAction.PAUSE else capabilities.resume
         if not isinstance(self.backend, PlaybackControls) or capability.support not in {
@@ -286,6 +311,9 @@ class PlaybackApplication:
                 CommandOutcome.REJECTED,
                 self.clock.utcnow(),
                 error,
+                diagnostic=ControlDiagnostic(
+                    ControlStage.APPLICATION, ControlReason.CAPABILITY_UNAVAILABLE
+                ),
             )
             return PlaybackResult(baseline, snapshot, receipt, snapshot.evidence.reason)
         backend = self.backend
