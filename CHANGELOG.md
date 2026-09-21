@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add composed process-loss recovery tests and an opt-in foreground-service
+  checkpoint driver. Read-only traces and explicit playback runs preserve private
+  evidence, separate acknowledgement/ticket/verified-state timing, and never
+  retry uncertain effects. The three-session live M2 acceptance gate remains open.
+
+- Record the merged foreground-service checkpoint at `b4ff7d3`: durable natural
+  completion and guarded stop/reopen work, automatic handoff remains held, and
+  active-stop client-visible timing was 10,431.17 ms. Plan independent handoff
+  diagnostics, stop responsiveness and composed recovery/acceptance workstreams.
+
 - Compose an explicit foreground queue service, private local IPC and CLI clients
   around the single owner. Journal pause/resume and internal finished-item release;
   require observed idle before starting a successor. Restart retains uncertainty

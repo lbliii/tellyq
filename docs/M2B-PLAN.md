@@ -231,3 +231,45 @@ IFrame API numeric values were not substituted. The next supervised checkpoint
 tests foreground ownership/status/stop/shutdown first, then attempts supported
 handoffs. Three three-item live sessions and six handoffs are still required to
 close the milestone.
+
+## Closing workstreams
+
+PRs #27–29 are merged at `b4ff7d3`. The
+[foreground-service checkpoint](M2B-CHECKPOINT.md) passed ownership, playback,
+durable completion, cancellation and status-only reopen checks. Automatic release
+held, so no successor started. Active-stop acknowledgement was below one second;
+the measured client-visible outcome was 10,431.17 ms, above the ten-second target.
+
+The closing swarm starts three independent branches from that exact `main`.
+Every PR targets `main`; no branch requires an unmerged sibling to pass its tests.
+
+| Workstream | Branch | Deliverable and review gate |
+| --- | --- | --- |
+| Handoff diagnosis | [PR #31](https://github.com/lbliii/tellyq/pull/31), `codex/m2-handoff-diagnostics` | Typed, sanitized hold reasons and evidence through cached status; replay actual ending/reset shapes and retain takeover/ad vetoes. Repair only behavior supported by evidence. Unknown code 5 is not reinterpreted by numeric coincidence. |
+| Stop responsiveness | [PR #30](https://github.com/lbliii/tellyq/pull/30), `codex/m2-stop-latency` | Return once sufficient correlated stop evidence is available, preserving the observation deadline, ownership checks and queued contradictions. Keep command acknowledgement separate from verified outcome. |
+| Recovery and acceptance | `codex/m2-recovery-acceptance` | Composed crash-boundary tests and an explicit, bounded service checkpoint tool with reproducible timing and a sanitized record. No hardware effects in normal tests. |
+
+Shared protocol/JSON changes are coordinated, and the exact combined candidate
+must pass lint, formatting, types, offline tests and packaging/install checks.
+Agents do not discover or control devices. The next hardware checkpoint is a
+separately requested, supervised run after review; publishing these PRs alone does
+not accept M2.
+
+Acceptance proceeds in this order:
+
+1. Inspect one fresh natural ending's exact hold/eligibility evidence. If it holds,
+   keep the queue safe and fix the supported cause; do not retry indefinitely or
+   bypass an unknown provider state to force a handoff.
+2. Demonstrate one supported automatic A → B handoff with no duplicate dispatch.
+3. Measure foreground active stop: local acknowledgement within one second and
+   the first client-visible verified outcome within ten seconds. Record actual
+   polling resolution and distinguish receiver timestamps from client timings.
+4. Complete three three-item sessions with six correct automatic handoffs,
+   foreground pause/resume and cancellation that prevents further advancement.
+5. Exercise pre-dispatch, post-dispatch/pre-acknowledgement and post-completion
+   interruption/reopen boundaries. Retain uncertainty and never replay device
+   effects silently. Record which cases use a synthetic backend and which are live.
+
+The final commit-specific acceptance record must identify the tested revision,
+observed transitions, delays, recovery outcomes, visual confirmations and remaining
+limits. M3 CLI/MCP work begins after this gate, not as a substitute for it.
