@@ -26,7 +26,7 @@ from tellyq.domain.values import (
     Support,
 )
 from tellyq.playback_task import PlaybackTask
-from tellyq.queue_execution import QueueCommandRequest
+from tellyq.queue_execution import OutcomePersistenceError, QueueCommandRequest
 from tellyq.queue_store import QueueStoreError, SQLiteQueueStore
 from tellyq.runner import Cancellation, RunnerCommand
 from tellyq.session_store import decode_snapshot, encode_snapshot
@@ -590,3 +590,104 @@ def test_stop_after_settlement_preserves_finished_outcome_and_cancels_queue(rig)
     assert result.queue.cancellation_requested
     assert result.playback.state == PlayerState.STOPPED
     assert not result.playback.release_confirmed
+
+
+@pytest.mark.parametrize("hazard", ["replacement", "ad"])
+def test_automatic_start_rechecks_predecessor_proof_after_its_own_baseline(
+    rig, monkeypatch, hazard
+):
+    task, backend, _, cancellation, _, _ = rig
+    start(task, cancellation)
+    backend.finish()
+    task.step(cancellation)
+    task.step(cancellation)
+    original = backend.observe
+    calls = 0
+
+    def later_baseline(target):
+        nonlocal calls
+        calls += 1
+        if calls != 2:
+            return original(target)
+        return (
+            backend.event(
+                session_id="session",
+                application_id="app",
+                playback_id="media",
+                content=ITEMS[1].content if hazard == "replacement" else ITEMS[0].content,
+                ad_active=hazard == "ad",
+                state=PlayerState.BUFFERING,
+            ),
+            backend.event(session_active=False),
+        )
+
+    monkeypatch.setattr(backend, "observe", later_baseline)
+    result = task.step(cancellation)
+    assert result.queue.items[1].intent == QueueIntent.NEEDS_ATTENTION
+    assert result.queue.cancellation_requested
+    assert [a for a, _ in backend.commands] == ["start", "stop"]
+
+
+def test_refused_control_retains_replacement_from_its_blocking_baseline(rig):
+    task, backend, _, cancellation, _, _ = rig
+    start(task, cancellation)
+    backend.next_batch = lambda: (
+        backend.event(session_id="other-session", application_id="other-app", session_active=True),
+        backend.event(
+            session_id="other-session",
+            application_id="other-app",
+            content=ITEMS[1].content,
+            playback_id="other-media",
+            state=PlayerState.PLAYING,
+        ),
+    )
+    refused = task.handle(RunnerCommand("pause", CommandAction.PAUSE), cancellation)
+    assert refused.playback.ownership_lost
+    backend.finish()
+    result = task.step(cancellation)
+    assert result.playback.ownership_lost
+    assert result.playback.completion is None
+    assert [a for a, _ in backend.commands] == ["start"]
+
+
+def test_release_outcome_persistence_failure_never_uses_observed_idle_to_advance(rig, monkeypatch):
+    task, backend, store, cancellation, _, _ = rig
+    start(task, cancellation)
+    backend.finish()
+    task.step(cancellation)
+    original = store.record_outcome
+
+    def failed_outcome(queue_id, command_id, *args, **kwargs):
+        if command_id.startswith("release-"):
+            raise OSError("injected persistence failure")
+        return original(queue_id, command_id, *args, **kwargs)
+
+    monkeypatch.setattr(store, "record_outcome", failed_outcome)
+    with pytest.raises(OutcomePersistenceError):
+        task.step(cancellation)
+    result = task.step(cancellation)
+    assert result.playback.release_confirmed
+    assert result.queue.commands[-1].state == ExecutionState.DISPATCHED
+    assert result.queue.items[1].intent == QueueIntent.PENDING
+    assert [a for a, _ in backend.commands] == ["start", "stop"]
+
+
+def test_release_snapshot_persistence_failure_holds_even_with_accepted_remote_receipt(
+    rig, monkeypatch
+):
+    task, backend, _, cancellation, _, _ = rig
+    start(task, cancellation)
+    backend.finish()
+    task.step(cancellation)
+    original = task._app.store.save
+
+    def failed_save(snapshot, **kwargs):
+        if snapshot.release_confirmed:
+            raise OSError("injected session write failure")
+        return original(snapshot, **kwargs)
+
+    monkeypatch.setattr(task._app.store, "save", failed_save)
+    result = task.step(cancellation)
+    assert result.queue.cancellation_requested
+    assert result.queue.items[1].intent == QueueIntent.PENDING
+    assert [a for a, _ in backend.commands] == ["start", "stop"]
