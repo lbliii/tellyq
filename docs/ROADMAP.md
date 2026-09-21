@@ -116,6 +116,15 @@ transitions, and accepts stop/status while an item is running. Add explicit paus
 resume and skip only for adapters that support them. Record skipped separately
 from finished. Handle provider autoplay without competing with it.
 
+Two isolated native YouTube `play_next` experiments have now verified A's natural
+completion, intervening ad-state observations, and exact B playback without an
+app exit/relaunch. A separate clear-plus-exit cancellation check kept B from
+starting during 125 seconds of observation. These establish a candidate route,
+not foreground-runner acceptance. The user approved one already authorized
+successor continuing if TellyQ disconnects, with reconciliation on reconnect.
+The [native queue integration plan](M2-NATIVE-QUEUE-PLAN.md) records that behavior,
+the optional capability, durable reservation, and recovery work.
+
 Acceptance:
 
 - Three three-item runs yield six correct automatic handoffs, with no early or
@@ -125,11 +134,16 @@ Acceptance:
 - Kill/restart at pre-dispatch, post-dispatch/pre-acknowledgement and post-completion
   points. Reconcile uncertain effects before retrying; never promise transactional
   exactly-once delivery to a device that cannot supply it.
-- Stopping cancels pending advancement. Status is non-mutating at the device.
-  On a healthy LAN, local stop requests are accepted within one second and the
-  observed stop outcome arrives within ten seconds. A timeout is explicit.
-- Missing completion evidence holds the queue and requests attention. Published
-  runtime and reaching a duration budget never imply completion.
+- Stopping immediately cancels further local dispatch. Cancellation of already
+  staged remote work requires a verified remote outcome; otherwise it remains
+  explicitly uncertain. Status is non-mutating at the device. On a healthy LAN,
+  local stop requests are accepted within one second and the observed stop outcome
+  arrives within ten seconds. A timeout is explicit.
+- Missing completion evidence prevents further controller dispatch and requests
+  attention. With the approved native-queue route, one previously authorized
+  receiver-staged successor may still continue; a local hold does not retract it.
+  Reconcile that playback without inventing the predecessor's completion.
+  Published runtime and reaching a duration budget never imply completion.
 
 ## M3 — Adopt Milo for CLI and MCP
 
