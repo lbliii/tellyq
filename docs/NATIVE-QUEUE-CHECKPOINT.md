@@ -95,6 +95,9 @@ stable Python 3.14.0, `uv run --locked poe check` passed Ruff, formatting, ty an
 all 1,103 tests. The initial sandboxed run passed 1,090 tests and failed 13
 existing IPC scenarios because Unix socket binding was denied; the full rerun
 with local socket permission passed. The tests continued to block network/DNS.
+The first CI packaging check caught the new fixture directory missing from the
+source manifest. The manifest now explicitly includes the reviewed native-queue
+fixtures; private runtime logs remain excluded.
 
 ## Source and implementation boundaries
 
