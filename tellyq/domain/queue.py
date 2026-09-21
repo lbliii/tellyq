@@ -108,6 +108,29 @@ class QueueStore(Protocol):
         """Cancel local pending starts, including between items; imply no remote stop."""
         ...
 
+    def prepare_control(
+        self,
+        queue_id: str,
+        *,
+        attempt_id: str,
+        command_id: str,
+        action: CommandAction,
+        at: datetime,
+        expected_revision: int,
+    ) -> QueueSnapshot: ...
+
+    def prepare_release(
+        self,
+        queue_id: str,
+        *,
+        attempt_id: str,
+        command_id: str,
+        at: datetime,
+        expected_revision: int,
+    ) -> QueueSnapshot:
+        """Prepare at most one release of the latest finished attempt; never cancel."""
+        ...
+
     def mark_dispatched(
         self, queue_id: str, command_id: str, *, at: datetime, expected_revision: int
     ) -> QueueSnapshot:
