@@ -72,6 +72,9 @@ class HandoffReason(StrEnum):
     QUEUE_POLICY_HOLD = "queue_policy_hold"
     SUCCESSOR_ELIGIBLE = "successor_eligible"
     EXHAUSTED = "exhausted"
+    NATIVE_SUCCESSOR_PENDING = "native_successor_pending"
+    STOP_AWAITING_NATIVE_OBSERVATION = "stop_awaiting_native_observation"
+    NATIVE_RECONCILIATION_REQUIRED = "native_reconciliation_required"
 
 
 @dataclass(frozen=True, slots=True)

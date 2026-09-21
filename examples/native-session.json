@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "mode": "native",
+  "queue_id": "replace-with-a-new-session-id",
+  "target": {
+    "device_id": "00000000-0000-4000-8000-000000000000",
+    "route": "cast"
+  },
+  "items": [
+    {"item_id": "forest-1", "provider": "youtube", "content_id": "-6_mbMXxdfg", "title": "Abernethy Forest | 90 seconds in nature"},
+    {"item_id": "marshes", "provider": "youtube", "content_id": "5mI7HgjSi1Q", "title": "Insh Marshes | 90 seconds in nature"},
+    {"item_id": "forest-2", "provider": "youtube", "content_id": "-6_mbMXxdfg", "title": "Abernethy Forest | 90 seconds in nature"}
+  ]
+}

@@ -4,7 +4,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
 
-from .queue import ExecutionState, QueueAttempt, QueueIntent, QueueSnapshot
+from .queue import (
+    AttemptOrigin,
+    ExecutionState,
+    NativeReservationState,
+    QueueAttempt,
+    QueueIntent,
+    QueueMode,
+    QueueSnapshot,
+)
 from .values import (
     CommandAction,
     CompletionAttribution,
@@ -40,6 +48,8 @@ class QueueReason(StrEnum):
     RECEIVER_UNCONFIRMED = "receiver_unconfirmed"
     NEXT_ITEM = "next_item"
     EXHAUSTED = "exhausted"
+    RECONCILIATION_REQUIRED = "reconciliation_required"
+    NATIVE_SUCCESSOR_REQUIRED = "native_successor_required"
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,12 +159,31 @@ def _valid_queue(queue: QueueSnapshot) -> bool:
         and attempt.intent != QueueIntent.PENDING
         and (attempt.intent != QueueIntent.CURRENT or attempt.decision_id is None)
         and (attempt.intent not in _SETTLED or bool(attempt.decision_id))
-        and sum(
-            command.attempt_id == attempt.attempt_id and command.action == CommandAction.START
-            for command in queue.commands
-        )
-        == 1
+        and _valid_attempt_origin(queue, attempt)
         for attempt in queue.attempts
+    )
+
+
+def _valid_attempt_origin(queue: QueueSnapshot, attempt: QueueAttempt) -> bool:
+    starts = sum(
+        command.attempt_id == attempt.attempt_id and command.action == CommandAction.START
+        for command in queue.commands
+    )
+    if attempt.origin == AttemptOrigin.LOCAL_START:
+        return starts == 1 and attempt.reservation_id is None
+    return (
+        queue.mode == QueueMode.NATIVE
+        and attempt.origin == AttemptOrigin.NATIVE_OBSERVED
+        and starts == 0
+        and any(
+            reservation.reservation_id == attempt.reservation_id
+            and reservation.successor_attempt_id == attempt.attempt_id
+            and reservation.successor_item_id == attempt.item_id
+            and reservation.state
+            in {NativeReservationState.ADOPTED, NativeReservationState.SESSION_EXIT_OBSERVED}
+            and reservation.adoption_decision_id is not None
+            for reservation in queue.reservations
+        )
     )
 
 
@@ -174,10 +203,13 @@ def _session_matches(
         and request.content == item.content
         and scope.connection_generation == authority.connection_generation
         and authority.started_monotonic <= scope.started_monotonic <= now
-        and all(
-            command.generation == queue.generation
-            for command in queue.commands
-            if command.attempt_id == attempt.attempt_id
+        and (
+            queue.mode == QueueMode.NATIVE
+            or all(
+                command.generation == queue.generation
+                for command in queue.commands
+                if command.attempt_id == attempt.attempt_id
+            )
         )
     )
 
@@ -344,7 +376,7 @@ def decide_queue(
         or authority.started_monotonic > now
     ):
         return hold(QueueReason.SCOPE_MISMATCH)
-    if any(
+    if queue.mode != QueueMode.NATIVE and any(
         item.intent in {QueueIntent.NEEDS_ATTENTION, QueueIntent.STOPPED} for item in queue.items
     ):
         return hold(QueueReason.NEEDS_ATTENTION)
@@ -388,6 +420,12 @@ def decide_queue(
         if session.ownership_lost:
             reason = QueueReason.RECEIVER_REPLACED
         return hold(reason, settlement)
+    if queue.reconciliation_required:
+        return hold(QueueReason.RECONCILIATION_REQUIRED)
+    if queue.mode == QueueMode.NATIVE and queue.attempts:
+        # Native successors are adopted from reserved observations. Never fall
+        # back to a second START, even if the receiver appears idle after a gap.
+        return hold(QueueReason.NATIVE_SUCCESSOR_REQUIRED)
     if session is not None and session.ownership_lost:
         return hold(QueueReason.RECEIVER_REPLACED)
     if attempt is not None and attempt.intent == QueueIntent.FINISHED:

@@ -322,6 +322,8 @@ def wire_view(view: TaskView) -> IPCTaskView:
             "generation": saved.generation,
             "current_item_id": saved.current_item_id,
             "cancellation_requested": saved.cancellation_requested,
+            "mode": saved.mode.value,
+            "reconciliation_required": saved.reconciliation_required,
             "item_count": len(saved.items),
             "items_truncated": len(saved.items) > len(selected),
             "items": [
@@ -335,6 +337,26 @@ def wire_view(view: TaskView) -> IPCTaskView:
                 }
                 for item in selected
             ],
+            "native_reservations": [
+                {
+                    "reservation_id": reservation.reservation_id,
+                    "predecessor_attempt_id": reservation.predecessor_attempt_id,
+                    "successor_item_id": reservation.successor_item_id,
+                    "successor_attempt_id": reservation.successor_attempt_id,
+                    "state": reservation.state.value,
+                }
+                for reservation in saved.reservations[-32:]
+            ],
+            "native_operations": [
+                {
+                    "operation_id": operation.operation_id,
+                    "reservation_id": operation.reservation_id,
+                    "action": operation.action.value,
+                    "state": operation.state.value,
+                }
+                for operation in saved.native_operations[-32:]
+            ],
+            "native_operations_truncated": len(saved.native_operations) > 32,
         }
     return {
         "playback": playback,

@@ -71,7 +71,10 @@ All branches start directly from the baseline and target `main`.
 
 ## Foreground integration
 
-Implement against the reviewed capability contract after the first batch lands.
+The capability and replay foundations have landed. The next implementation batch
+adds durable reservations, passive observation and the opt-in
+[foreground native runner](NATIVE-QUEUE-RUNNER.md), with offline validation before
+the hardware gates below. This does not mark M2 accepted.
 
 ### Durable reservation and dispatch
 
