@@ -37,7 +37,7 @@ dev = [
     "pytest-timeout>=2.3,<3",
     "ruff==0.16.8",
     "setuptools>=80,<85",
-    "ty==0.0.34",
+    "ty==0.0.82",
 ]
 
 [tool.ruff]
