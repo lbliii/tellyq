@@ -35,9 +35,10 @@ def test_service_process_loss_never_replays_or_advances(boundary):
 
 
 @pytest.mark.timeout(20)
-def test_checkpoint_client_observes_three_item_composed_service():
+@pytest.mark.parametrize("poll_seconds", [0.05, 0.3])
+def test_checkpoint_client_observes_three_item_composed_service(poll_seconds):
     result = subprocess.run(
-        [sys.executable, "-m", "tests.service_recovery_scenario", "checkpoint"],
+        [sys.executable, "-m", "tests.service_recovery_scenario", "checkpoint", str(poll_seconds)],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,

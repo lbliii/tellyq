@@ -10,7 +10,7 @@ import tempfile
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from threading import Event, Thread
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from tellyq import __main__ as cli
 from tellyq import service
@@ -35,9 +35,10 @@ SPEC = service.QueueSpec(
 
 
 class RecordedBackend(Backend):
-    def __init__(self, runtime, boundary):
+    def __init__(self, runtime, boundary, observed_playing=None):
         super().__init__(FakeClock())
         self.runtime, self.boundary = runtime, boundary
+        self.observed_playing = observed_playing
 
     def record(self, action):
         with (self.runtime / "effects.jsonl").open("a") as stream:
@@ -54,6 +55,14 @@ class RecordedBackend(Backend):
         return super().stop(scope)
 
     def observe(self, target):
+        if self.active and self.reads >= 1 and self.observed_playing is not None:
+            assert self.request is not None
+            # The owner has published its PLAYING view before its next step.
+            # Hold the synthetic ending until the real IPC checkpoint client has
+            # received that evidence; cached status remains readable meanwhile.
+            assert self.observed_playing[self.request.queue_item_id].wait(5), (
+                "The checkpoint client never observed this item's verified playback."
+            )
         if self.active and self.boundary == "cancellation":
             # Hold content in verified PLAYING until the explicit stop command.
             self.reads = 0
@@ -70,8 +79,8 @@ class RecordedBackend(Backend):
         return events
 
 
-def start_service(runtime, boundary):
-    backend = RecordedBackend(runtime, boundary)
+def start_service(runtime, boundary, observed_playing=None):
+    backend = RecordedBackend(runtime, boundary, observed_playing)
     outcomes = []
     ready = Event()
 
@@ -225,28 +234,58 @@ def run(boundary):
         }
 
 
-def checkpoint():
+class ObservedPlayingJournal:
+    def __init__(self, observed_playing):
+        self.observed_playing = observed_playing
+
+    def write(self, kind, **fields):
+        if kind != "status":
+            return
+        view = fields["response"]["snapshot"]["view"]
+        playback, queue = view["playback"], view["queue"]
+        if playback is None or queue is None:
+            return
+        for item in SPEC.items:
+            if (
+                queue["current_item_id"] == item.item_id
+                and playback["content_id"] == item.content.content_id
+                and playback["state"] == "playing"
+                and playback["ownership_lost"] is False
+                and playback["evidence"]["receiver_playback_confirmed"] is True
+            ):
+                self.observed_playing[item.item_id].set()
+
+
+def checkpoint(poll_seconds=0.05):
     with tempfile.TemporaryDirectory(prefix="tq-checkpoint-", dir="/tmp") as directory:
         runtime = Path(directory) / "runtime"
-        thread, client, outcomes = start_service(runtime, "natural")
+        observed_playing = {item.item_id: Event() for item in SPEC.items}
+        thread, client, outcomes = start_service(runtime, "natural", observed_playing)
         try:
             summary = run_service_checkpoint(
                 client,
                 SPEC,
-                ServiceCheckpointOptions("start", seconds=5, poll_seconds=0.05, cleanup_stop=True),
-                Mock(),
+                ServiceCheckpointOptions(
+                    "start", seconds=5, poll_seconds=poll_seconds, cleanup_stop=True
+                ),
+                ObservedPlayingJournal(observed_playing),
             )
             assert effects(runtime) == ["start", "stop"] * 3
             assert summary["stop_reason"] == "queue_finished_and_released"
             assert summary["cleanup"] == "release_observed"
             assert summary["verified_handoffs"] == 2
+            assert all(event.is_set() for event in observed_playing.values())
             assert all(item["verified_at_ms"] is not None for item in summary["items"])
             assert all(item["finished_at_ms"] is not None for item in summary["items"])
             assert summary["commands"][0]["first_verified_state_ms"] is not None
             return summary
         finally:
-            client.shutdown()
-            thread.join(2)
+            try:
+                client.shutdown()
+            finally:
+                for event in observed_playing.values():
+                    event.set()
+                thread.join(2)
             assert not thread.is_alive() and outcomes == [0]
 
 
@@ -256,6 +295,6 @@ if __name__ == "__main__":
     if sys.argv[1] == "crash":
         crash_process(Path(sys.argv[3]), sys.argv[2])
     elif sys.argv[1] == "checkpoint":
-        sys.stdout.write(json.dumps(checkpoint()))
+        sys.stdout.write(json.dumps(checkpoint(float(sys.argv[2]) if len(sys.argv) > 2 else 0.05)))
     else:
         sys.stdout.write(json.dumps(run(sys.argv[1])))
