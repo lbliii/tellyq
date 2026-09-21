@@ -132,6 +132,19 @@ def _wire_diagnostics(statuses: object) -> MediaWireDiagnostics:
     }
 
 
+def custom_player_state(status: object) -> tuple[int | None, WireFieldShape]:
+    """Retain only the reviewed scalar field; interpretation needs receiver provenance."""
+    custom = _field(status, "customData")
+    shape = _field_shape(
+        custom,
+        "playerState",
+        lambda value: (
+            isinstance(value, int) and not isinstance(value, bool) and -(2**31) <= value < 2**31
+        ),
+    )
+    return (_integer(_field(custom, "playerState")) if shape == "valid" else None), shape
+
+
 def media_observation(data: object) -> Observation:
     """Extract the first media status, preserving missing or invalid fields."""
     statuses = _field(data, "status")
@@ -143,6 +156,7 @@ def media_observation(data: object) -> Observation:
     if media is None:
         media = _field(_field(status, "extendedStatus"), "media")
     session_id = _integer(_field(status, "mediaSessionId"))
+    provider_state, provider_shape = custom_player_state(status)
     return {
         "kind": "media",
         "empty_status": False if isinstance(status, dict) else None,
@@ -155,6 +169,8 @@ def media_observation(data: object) -> Observation:
         "idle_reason": _choice(_field(status, "idleReason"), _IDLE_REASONS),
         "ad_break": _ad_break(status),
         "pause_supported": _pause_supported(status),
+        "custom_player_state": provider_state,
+        "custom_player_state_shape": provider_shape,
         **_wire_diagnostics(statuses),
     }
 

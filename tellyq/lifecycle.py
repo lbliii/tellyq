@@ -20,6 +20,7 @@ from typing import Literal, Protocol
 from uuid import uuid4
 
 from .cast_backend import CastBackend, video_id
+from .completion_report import completion_report
 from .domain import policy
 from .domain.ports import Clock
 from .domain.values import (
@@ -38,6 +39,7 @@ from .models import (
     Observation,
     WireFieldShape,
 )
+from .youtube_state import YOUTUBE_APPLICATION_ID
 
 _WIRE_FIELDS = (
     "wire_media",
@@ -168,6 +170,7 @@ class LifecycleTracker:
             "receiver_playback_confirmed": value.receiver_playback_confirmed if value else False,
             "identity_observed": value.identity_confirmed if value else False,
             "natural_completion_confirmed": value.natural_completion_confirmed if value else False,
+            **completion_report(self.snapshot),
             "visual_confirmation": None,
             "reason": value.reason.value if value else "awaiting_observation",
         }
@@ -348,6 +351,14 @@ class CaptureSanitizer:
             result["wire_status_count"] = count
         elif "wire_status_count" in raw:
             result["wire_status_count"] = None
+        shape = raw.get("custom_player_state_shape")
+        if isinstance(shape, str) and shape in _WIRE_SHAPES:
+            result["custom_player_state_shape"] = _WIRE_SHAPES[shape]
+        if "custom_player_state" in raw:
+            code = raw["custom_player_state"]
+            result["custom_player_state"] = (
+                code if type(code) is int and -(2**31) <= code < 2**31 else None
+            )
         for key in ("position", "duration"):
             if key in raw:
                 result[key] = _number(raw[key])
@@ -360,7 +371,11 @@ class CaptureSanitizer:
             ("app_id", "application"),
         ):
             if key in raw:
-                result[key] = self._identifier(category, raw[key])
+                result[key] = (
+                    YOUTUBE_APPLICATION_ID
+                    if key == "app_id" and raw[key] == YOUTUBE_APPLICATION_ID
+                    else self._identifier(category, raw[key])
+                )
         if "playback_id" in raw:
             playback = self._identifier("playback", raw["playback_id"])
             result["playback_id"] = str(int(playback[9:21], 16)) if playback else None
@@ -712,6 +727,8 @@ def replay_capture(source: Path, destination: Path) -> None:
             clock.record = record
             # Interrupted windows are diagnostic only, even if their queued tail
             # contains a terminal status. Replaying must preserve that boundary.
+            if (record.get("partial") or record["kind"] == "gap") and tracker.snapshot is not None:
+                tracker.snapshot = policy.invalidate_history(tracker.snapshot)
             transport.batch = [] if record.get("partial") else record.get("observations", [])
             events = backend.observe_window(tracker.request.target, 2)
             backend.drain_raw_observations()

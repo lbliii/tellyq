@@ -223,6 +223,50 @@ class IdleReason(StrEnum):
     ERROR = "error"
 
 
+class IdentityUpdate(StrEnum):
+    UNKNOWN = "unknown"
+    EXPLICIT = "explicit"
+    OMITTED = "omitted"
+
+
+class ContentPhase(StrEnum):
+    UNKNOWN = "unknown"
+    PLAYING = "playing"
+    PAUSED = "paused"
+    BUFFERING = "buffering"
+    FINISHED = "finished"
+    AD = "ad"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderEvidence:
+    """Source-qualified interpretation supplied by an adapter, never a cached identity."""
+
+    source: str
+    phase: ContentPhase
+
+    def __post_init__(self) -> None:
+        if not self.source:
+            raise ValueError("provider evidence requires a source")
+
+
+class CompletionAttribution(StrEnum):
+    EXPLICIT = "explicit"
+    ORDERED_HISTORY = "ordered_history"
+
+
+@dataclass(frozen=True, slots=True)
+class CompletionEvidence:
+    """Historical terminal witness; independent of current ownership/telemetry freshness."""
+
+    observed_at: datetime
+    monotonic: float
+    sequence: int
+    identity_sequence: int
+    attribution: CompletionAttribution
+    source: str
+
+
 @dataclass(frozen=True, slots=True)
 class PlaybackObservation:
     target: PlaybackTarget
@@ -243,6 +287,8 @@ class PlaybackObservation:
     session_active: bool | None = None
     connection_reset: bool = False
     pause_supported: bool | None = None
+    identity_update: IdentityUpdate = IdentityUpdate.UNKNOWN
+    provider_evidence: ProviderEvidence | None = None
 
     def __post_init__(self) -> None:
         _require_aware(self.observed_at)
@@ -323,6 +369,8 @@ class SessionSnapshot:
     latest: PlaybackObservation | None = None
     progress_anchor: PlaybackObservation | None = None
     has_confirmed_playback: bool = False
+    completion_anchor: PlaybackObservation | None = None
+    completion: CompletionEvidence | None = None
     stop_requested: bool = False
     stop_boundary: float | None = None
     last_sequence: int = -1

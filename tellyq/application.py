@@ -15,6 +15,7 @@ from .domain.values import (
     ErrorCode,
     EvidenceReason,
     PlaybackError,
+    PlaybackEvidence,
     PlaybackObservation,
     PlaybackRequest,
     PlaybackScope,
@@ -189,7 +190,14 @@ class PlaybackApplication:
         initial = (
             replace(owned, scope=replace(scope, started_monotonic=owned.scope.started_monotonic))
             if owned.scope.connection_generation == latest.connection_generation
-            else SessionSnapshot(scope, stop_requested=owned.stop_requested)
+            else SessionSnapshot(
+                scope,
+                stop_requested=owned.stop_requested,
+                completion=owned.completion,
+                evidence=PlaybackEvidence(
+                    natural_completion_confirmed=owned.completion is not None
+                ),
+            )
         )
         snapshot = self._apply(initial, events)
         if snapshot.ownership_lost:
@@ -205,7 +213,23 @@ class PlaybackApplication:
         try:
             snapshot = self._reconcile(request, owned, boundary, events)
         except ValueError:
-            return PlaybackResult(events, reason=EvidenceReason.SESSION_REPLACED)
+            evaluated = self._apply(owned, events)
+            if evaluated.completion is None:
+                return PlaybackResult(events, reason=EvidenceReason.SESSION_REPLACED)
+            # Historical completion survives reconnect/replacement without reviving
+            # ownership or current playback evidence. Controls still reconcile strictly.
+            snapshot = replace(
+                evaluated,
+                ownership_lost=True,
+                progress_anchor=None,
+                completion_anchor=None,
+                has_confirmed_playback=False,
+                evidence=PlaybackEvidence(
+                    natural_completion_confirmed=True, reason=EvidenceReason.SESSION_REPLACED
+                ),
+            )
+            snapshot = self._persist(snapshot, revision)
+            return PlaybackResult(events, snapshot, reason=EvidenceReason.SESSION_REPLACED)
         snapshot = self._persist(snapshot, revision)
         return PlaybackResult(events, snapshot, reason=snapshot.evidence.reason)
 
