@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "queue_id": "replace-with-a-new-session-id",
+  "target": {
+    "device_id": "00000000-0000-4000-8000-000000000000",
+    "route": "cast"
+  },
+  "items": [
+    {"item_id": "earth-1", "provider": "youtube", "content_id": "f9F7yDjSdNA", "title": "Why Does NASA Study Earth?"},
+    {"item_id": "dirt", "provider": "youtube", "content_id": "hgsIFyITvJE", "title": "Dishing the Dirt"},
+    {"item_id": "earth-2", "provider": "youtube", "content_id": "f9F7yDjSdNA", "title": "Why Does NASA Study Earth?"}
+  ]
+}

@@ -159,6 +159,33 @@ class Report(TypedDict, total=False):
     report_path: str
 
 
+class QueueManifestItemJSON(TypedDict):
+    item_id: str
+    provider: Literal["youtube"]
+    content_id: str
+    kind: NotRequired[Literal["video"]]
+    title: NotRequired[str | None]
+
+
+class QueueManifestTargetJSON(TypedDict):
+    device_id: str
+    route: Literal["cast"]
+    name: NotRequired[str | None]
+
+
+class QueueManifestJSON(TypedDict):
+    schema_version: Literal[1]
+    queue_id: str
+    target: QueueManifestTargetJSON
+    items: list[QueueManifestItemJSON]
+
+
+class ServiceReport(TypedDict):
+    schema_version: Literal[1]
+    event: Literal["initializing", "ready", "stopping", "closed"]
+    snapshot: IPCRunnerSnapshot
+
+
 class SnapshotRecord(TypedDict):
     """Durable identity and history only; monotonic evidence is deliberately absent."""
 

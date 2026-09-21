@@ -87,12 +87,14 @@ class CastBackend:
         seconds: float = 30,
         *,
         read_only: bool = False,
+        retain_raw: bool = True,
     ) -> None:
         self.transport = transport
         self.target = target
         self.clock = clock
         self.seconds = seconds
         self._read_only = read_only
+        self._retain_raw = retain_raw
         self.generation = str(uuid4())
         self.raw_observations: list[Observation] = []
         self._sequence = 0
@@ -371,11 +373,32 @@ class CastBackend:
             if observation is not None:
                 result.append(observation)
                 if not self.read_only:
-                    self._identity_history.append(observation)
+                    self._remember_identity(observation)
         return tuple(result)
 
+    def _remember_identity(self, observation: PlaybackObservation) -> None:
+        """Retain the exact witnesses needed by any scoped takeover query.
+
+        For each field, a scope's most recent mismatch is either the newest
+        value or the newest different value. Two distinct non-null values per
+        field therefore preserve every boundary query with at most six events.
+        A return to the original identity cannot erase its takeover witness.
+        """
+        candidates = [*self._identity_history, observation]
+        kept: set[int] = set()
+        for field in ("session_id", "application_id", "content"):
+            values: list[object] = []
+            for index in range(len(candidates) - 1, -1, -1):
+                value = getattr(candidates[index], field)
+                if value is not None and value not in values:
+                    values.append(value)
+                    kept.add(index)
+                    if len(values) == 2:
+                        break
+        self._identity_history = [candidates[index] for index in sorted(kept)]
+
     def _remember_raw(self, raw: list[Observation]) -> None:
-        if self.read_only:
+        if self.read_only or not self._retain_raw:
             self.raw_observations = [event.copy() for event in raw]
         else:
             self.raw_observations.extend(event.copy() for event in raw)
@@ -541,6 +564,7 @@ def open_backend(
     seconds: float,
     *,
     read_only: bool = False,
+    retain_raw: bool = True,
     metadata_probe: YouTubeMetadataProbe | None = None,
 ) -> Iterator[tuple[CastBackend, Device]]:
     if metadata_probe is not None and not read_only:
@@ -554,7 +578,14 @@ def open_backend(
     )
     with connection_context as (connection, device):
         yield (
-            CastBackend(_Transport(connection), target, clock, seconds, read_only=read_only),
+            CastBackend(
+                _Transport(connection),
+                target,
+                clock,
+                seconds,
+                read_only=read_only,
+                retain_raw=retain_raw,
+            ),
             device,
         )
 

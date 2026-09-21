@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+- Compose an explicit foreground queue service, private local IPC and CLI clients
+  around the single owner. Journal pause/resume and internal finished-item release;
+  require observed idle before starting a successor. Restart retains uncertainty
+  and never silently resumes queue work. Synthetic composition tests are separate
+  from pending M2b live acceptance; unexplained YouTube code-5/reset holds.
+
 - Add M2b components for pure queue decisions, fenced durable dispatch/recovery,
   and a persistent owner with bounded mailbox, cached status and priority stop.
-  They pass 832 combined offline tests. Foreground CLI/IPC composition and live
-  automatic handoff acceptance remain subsequent work.
+  They pass 832 combined offline tests at merged `9715b58`. The composition above
+  connects them; live automatic handoff acceptance remains pending.
 - Record merged M2a acceptance at `6aec896` and the independent M2b work-stream plan.
 
 - Interpret a finite set of source-qualified YouTube player states and attribute

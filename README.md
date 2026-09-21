@@ -53,8 +53,11 @@ through a later ad state and content replacement while refusing unsafe cleanup.
 PRs #20–22 are merged at `6aec896`; the merged tree matches the tested candidate
 and passes 666 tests. The [M2a checkpoint](docs/M2A-CHECKPOINT.md) preserves every
 attempt and remaining limits. The [M2b plan](docs/M2B-PLAN.md) starts the persistent
-owner, queue policy and durable execution work. Automatic advancement remains
-unimplemented.
+owner, queue policy and durable execution work. Those components merged at
+`9715b58`, which passes 832 offline tests. The composition adds an explicit
+[foreground service](docs/FOREGROUND-SERVICE.md), private local commands and guarded
+queue handoffs. Automated synthetic scenarios pass; the M2b live handoff gate is
+still pending. Observed YouTube code-5/reset behavior deliberately holds the queue.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
 
@@ -130,7 +133,7 @@ commit hooks, dependency changes and the macOS/Linux CI checks. For a sandbox-lo
 uv cache, prefix uv commands with `UV_CACHE_DIR=runtime/uv-cache`.
 
 See [implementation work and verification](docs/IMPLEMENTATION.md) and the
-[commit-specific completion checkpoint](docs/M2A-CHECKPOINT.md). No automatic
+[commit-specific completion checkpoint](docs/M2A-CHECKPOINT.md). No live automatic
 queue advancement test has been performed.
 
 ## Longer-term direction
