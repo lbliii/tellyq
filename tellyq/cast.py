@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from queue import Empty, Queue
 from threading import Event
 from time import monotonic
-from typing import Any, Protocol
+from typing import Protocol
 from uuid import UUID
 
 import pychromecast
@@ -15,6 +15,8 @@ from pychromecast.controllers.youtube import YouTubeController
 from pychromecast.models import CastInfo
 from zeroconf import Zeroconf
 
+from .cast_messages import media_observation as media_observation
+from .cast_messages import normalize_message
 from .models import Device, Observation
 
 MEDIA = "urn:x-cast:com.google.cast.media"
@@ -62,27 +64,6 @@ def select_device[T: HasUUID](devices: Iterable[T], device_id: str) -> T:
     return matches[0]
 
 
-def media_observation(data: dict[str, Any]) -> Observation:
-    """Extract only fields actually received, without MediaStatus's default values."""
-    statuses = data.get("status")
-    if not statuses:
-        return {"kind": "media", "empty_status": True}
-    status = statuses[0]
-    media = status.get("media") or status.get("extendedStatus", {}).get("media") or {}
-    return {
-        "kind": "media",
-        "empty_status": False,
-        "media_session_id": status.get("mediaSessionId"),
-        "content_id": media.get("contentId"),
-        "title": media.get("metadata", {}).get("title"),
-        "player_state": status.get("playerState"),
-        "position": status.get("currentTime"),
-        "duration": media.get("duration"),
-        "idle_reason": status.get("idleReason"),
-        "ad_break": bool(status.get("breakStatus")),
-    }
-
-
 class Observer(BaseController):
     """Passive listener alongside PyChromecast's standard handlers."""
 
@@ -90,32 +71,12 @@ class Observer(BaseController):
         super().__init__(namespace, target_platform=namespace == RECEIVER)
         self.events = events
 
-    def receive_message(self, _message: object, _data: dict[str, Any]) -> bool:
-        data = _data
-        value: Observation
-        if data.get("type") == "MEDIA_STATUS":
-            value = media_observation(data)
-        elif data.get("type") == "RECEIVER_STATUS":
-            status = data.get("status", {})
-            apps = status.get("applications") or []
-            app = apps[0] if apps else {}
-            value = {
-                "kind": "receiver",
-                "app_id": app.get("appId"),
-                "app_name": app.get("displayName"),
-                "app_session_id": app.get("sessionId"),
-                "active_input": status.get("isActiveInput"),
-                "standby": status.get("isStandBy"),
-            }
-        elif data.get("type") in {"LOAD_FAILED", "LAUNCH_ERROR"}:
-            value = {
-                "kind": "error",
-                "type": data["type"],
-                "reason": data.get("reason"),
-                "code": data.get("detailedErrorCode"),
-            }
-        else:
+    def receive_message(self, _message: object, _data: object) -> bool:
+        value = normalize_message(_data)
+        if value is None:
             return False
+        # The parser creates a new record containing only immutable scalars;
+        # later mutation of a library-owned message cannot alter queued evidence.
         self.events.put({"observed_at": now(), "monotonic": monotonic(), **value})
         return True
 
