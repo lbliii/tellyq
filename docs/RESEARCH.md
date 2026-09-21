@@ -15,6 +15,29 @@ hardware results are recorded separately in `IMPLEMENTATION.md` and ignored
   a future run actually exhibits the error.
 - [Bob Ross — Autumn Fantasy](https://www.youtube.com/watch?v=FozIp7Va7dY): official-channel full episode, season 20, episode 7. Exact-ID launch, visible playback, advancing position and stop were verified on the user's Chromecast on 2026-09-21; full-episode completion is still untested.
 
+### Native YouTube queue checkpoint
+
+On 2026-09-21, two isolated experiments using the installed controller's
+`play_next` verified a natural ending followed by the exact requested successor
+and advancing playback, with positive YouTube ad-state observations between
+programs. Neither exited/relaunched the app between items. The second success
+used no queue readback. A separate `clear_playlist` plus app-exit experiment
+verified idle and no successor playback during a 125-second observation window;
+it did not independently prove the remote queue was empty.
+
+An earlier `add_to_queue` call returned but did not produce the requested
+successor in that bounded run. Do not generalize one failure into unsupported
+status. The installed library's queue readback failed with an HTTP error and
+is not needed for the successful control route. Command acceptance remains
+separate from observed effects.
+
+These are community-library implementation methods, not an official Google
+Python SDK. Google's [Cast messages](https://developers.google.com/cast/docs/media/messages)
+define standard status fields but leave `customData` application-specific.
+The [native queue integration plan](M2-NATIVE-QUEUE-PLAN.md) describes the selected
+next work and the user-approved one-successor continuation/reconnect behavior.
+The persistent foreground runner has not yet adopted this route; M2 remains open.
+
 ## Possible later components
 
 - [Home Assistant Universal Media Player](https://www.home-assistant.io/integrations/universal/): combines controls/status from multiple integrations; useful for coordinating TV, streaming device, and sound system.
