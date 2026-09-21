@@ -10,8 +10,8 @@ tests and a live pause/resume/cleanup diagnostic. The user confirmed visible pau
 The completion candidate `2599345`, based on merged `fe73b6d`, passed 666 offline
 tests and M2a's lifecycle gate: three supported endings across two titles and a
 verified pause/resume. One run also captured ad code 1081 and subsequent content
-replacement; cleanup correctly refused that replacement. These are candidate
-results pending merge, not a claim about current `main`. See the [M1 acceptance
+replacement; cleanup correctly refused that replacement. PRs #20–22 merged at `6aec896`;
+the identical merged tree passed 666 fresh offline tests. See the [M1 acceptance
 record](M1-ACCEPTANCE.md) and [M2a checkpoint](M2A-CHECKPOINT.md) for exact results
 and remaining ad/recovery limits.
 
@@ -31,7 +31,7 @@ are proven on the actual device. A graphical interface is optional.
 | --- | --- | --- | --- |
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
-| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: M2a lifecycle gate passed on candidate `2599345`; M2b persistent owner and automatic advancement remain unimplemented |
+| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: M2a lifecycle gate passed and merged at `6aec896`; M2b component swarm underway; automatic advancement remains unimplemented |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | M2 |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
 | M5 | One subscription service integrated | Two exact titles, three start/status/stop runs, and two cross-service handoffs pass the supported autonomy level | M2 + M4 |
@@ -100,7 +100,7 @@ ad states. The reviewed completion candidate then passed the three-run/two-title
 lifecycle acceptance, including pause/resume, one positive ad code and replacement
 ownership refusal. The [acceptance record](M2A-CHECKPOINT.md) preserves earlier
 failures and specific untested ad/recovery behavior. M2b is the next implementation
-stage after the candidate merges.
+stage, starting with the [independent component swarm](M2B-PLAN.md).
 
 Split into two small deliverables.
 
@@ -230,10 +230,11 @@ separate compatibility lane, not a prerequisite for the useful release.
 
 ## Immediate next work
 
-Merge the independently tested completion and checkpoint branches, then validate
-the actual merged tree. Begin M2b with one persistent playback owner, a pure queue
-reducer, and durable command execution/recovery. Keep each agent branch targeted
-at `main` and freeze shared contracts before dividing file ownership.
+The completion and checkpoint branches are merged and the merged checks pass.
+The [M2b swarm](M2B-PLAN.md) implements one persistent playback owner, a pure queue
+reducer, and durable command execution/recovery on independent branches from
+`6aec896`. Compose their reviewed APIs into the foreground CLI/private IPC after
+merge, then test the integrated behavior.
 
 The first runner checkpoint must prove single ownership, responsive status/stop,
 no duplicate dispatch after crash/restart, and a hold on replacement content.

@@ -1,0 +1,132 @@
+# M2b: persistent ownership and durable queue execution
+
+Started 2026-09-21 from merged `main` at `6aec896`. PRs #20–22 are merged.
+This tree is identical to the final reviewed M2a integration tree `a82cb17`, and
+its fresh Python 3.14 `poe check` passes 666 tests, Ruff, formatting and ty.
+[Merged-main macOS/Linux CI](https://github.com/lbliii/tellyq/actions/runs/35638183132)
+also passed.
+M2a's three natural endings across two titles and verified pause/resume remain
+the live evidence baseline. Pulling the merged code did not trigger another
+hardware test.
+
+## Outcome and sequencing
+
+M2b adds one persistent playback owner, durable queue execution and recovery,
+then proves automatic handoffs. The first wave below implements independently
+testable components against the same `main` commit. None imports code from another
+unmerged branch. A later composition wave connects them to the foreground CLI and
+private local IPC; the components alone do not enable automatic playback.
+
+This split keeps the user's requested independent PRs while giving each stream
+clear ownership. Shared contract changes require coordination. Generic policy,
+local ownership and durable execution stay separate from YouTube interpretation.
+
+## First-wave work streams
+
+| Stream | Branch and file ownership | Measurable deliverable |
+| --- | --- | --- |
+| Q2: Pure queue decisions | `codex/m2b-queue-policy`; new `tellyq/domain/queue_policy.py`, focused domain tests and `docs/QUEUE-POLICY.md` | Decide settlement, hold, next eligible item or completion from existing immutable queue/playback evidence. One ending yields one decision; cancellation, uncertainty and takeover cannot launch a next item. |
+| R2: Durable dispatch and recovery | `codex/m2b-durable-execution`; new `tellyq/queue_execution.py`, focused tests and `docs/QUEUE-EXECUTION.md`; documentation-only clarification of `QueueStore.mark_dispatched` | Commit intent and win one dispatch claim before a bounded supplied device operation; record receipt separately. Repeated IDs, failed persistence and reopened databases never silently repeat an uncertain effect. |
+| R1/R3: Owner and mailbox | `codex/m2b-owner-mailbox`; new `tellyq/runner.py`, focused runner tests and `docs/RUNNER.md` | One non-daemon worker owns task creation, effects and close. Bounded mailbox, cached immutable status, priority stop/cancellation and explicit shutdown timeout; competing owners fail. |
+| Coordination | `codex/m2b-plan`; this plan, roadmap, architecture, acceptance notes and changelog | Review interfaces and failure boundaries, test independent and exact combined heads, and publish separate PRs targeting `main`. |
+
+All agent code runs offline. The coordinator owns integration and publication;
+no agent discovers devices, plays media or changes private legacy queue/session
+state. Agents use separate worktrees and editable environments.
+
+## Contracts to preserve
+
+### Decisions do not execute effects
+
+The pure queue policy consumes existing `QueueSnapshot`, `SessionSnapshot` and
+qualified `CompletionEvidence`. It receives current time and process-local owner
+authority as inputs, never reading a clock or creating IDs itself. Receiver time,
+duration, PAUSED, ads and an accepted command are not program completion.
+
+Settling an observed ending and permission to launch the next item are distinct.
+The policy returns a settlement first; the caller persists it, reloads the queue
+and evaluates again. A stop arriving between those steps cancels advancement.
+Historical completion followed by replacement may settle the old item, but the
+replacement must hold the queue. Fresh current evidence is required before a
+new launch. Explicit skip is separate from finished and never implies a remote
+stop occurred.
+
+### Durable local claims do not promise remote exactly-once delivery
+
+The executor reuses the existing SQLite store, including its strict atomic
+PENDING-to-DISPATCHED claim. Only the winner can invoke a supplied operation.
+Preparing the same command twice is idempotent local history; it is not permission
+to send the command twice. Commit acknowledgement separately from observed effect
+and queue settlement. No database transaction spans device I/O.
+
+Validate command/receipt identity, generation, queue revision and cancellation at
+the relevant boundaries. Failure after dispatch may mean the TV acted. Preserve
+that uncertainty and require reconciliation; never automatically resend it after
+restart. Exclusive runner ownership remains necessary around the unavoidable gap
+between a local commit and a remote effect. Persisted monotonic evidence cannot
+become fresh process-local authority after restart.
+
+### A responsive mailbox has one device owner
+
+The owner task is constructed, used and closed on one managed worker thread.
+Clients submit immutable commands and read cached immutable snapshots. Status
+must not wait for a device call. Stop sets a cancellation latch immediately and
+has priority over queued launches; the operation executing on the owner thread
+must check that latch at its effect boundary. No client thread controls the
+receiver directly.
+
+The initial owner retains both a private receiver lock and the legacy runtime's
+`command.lock`, preventing old direct commands from competing with it. This is a
+conservative single-runtime restriction; private IPC in the next wave provides
+status/stop access while that lock is held. The API is not yet `tellyq serve`.
+
+Shutdown requests cancellation and waits for a bounded interval. A timeout must
+report a still-running owner and retain its locks until the worker actually exits.
+The caller must not close the backend from another thread or pretend a blocked
+worker has stopped. Permanent cancellation ends that runner's session; any new
+session requires an explicit new owner.
+
+## Independent and combined validation
+
+Each code branch runs locked Python 3.14 `poe check`; packaging checks run for new
+modules. Ordinary tests keep socket and DNS access blocked. No new framework or
+dependency is required, and standard GIL-enabled Python remains the supported lane.
+
+The meaningful failure cases include:
+
+- Duplicate endings, completion plus replacement in one batch, stale receiver
+  evidence, ads, pauses and buffering; none can produce an early or repeated launch.
+- Cancellation between settlement and next selection, while queued, and after
+  dispatch preparation; status remains readable while the owner is busy.
+- Failures before dispatch, after dispatch but before acknowledgement, and during
+  outcome persistence; reopened SQLite state retains uncertainty without retry.
+- Competing owner processes, bounded mailbox overflow, task errors and shutdown
+  timeout; no premature unlock or second effect owner.
+
+The coordinator reviews the actual final APIs together, then tests all exact heads
+in an isolated integration checkout with `poe ci`, including build and isolated
+installation. Both independent and combined results are recorded before acceptance.
+Passing component tests is not a claim of measured live stop latency or handoffs.
+
+## Composition wave and hardware gate
+
+After the first-wave PRs merge:
+
+1. Compose a bounded playback task from `PlaybackApplication`, the queue reducer
+   and durable executor. Establish ownership and reconcile on startup. A deliberate
+   foreground command starts the owner; importing or viewing state does not.
+2. Add `tellyq serve` and a private local IPC client using shared typed command and
+   response contracts. Legacy JSON import stays explicit. CLI clients may exit
+   while the owner continues observing playback.
+3. Connect one verified completion to one durable settlement and eligible next
+   item. Recheck cancellation/current ownership before dispatch. Provider autoplay
+   or another controller taking over holds the queue for attention.
+4. Run end-to-end offline crash, mailbox and fake-backend scenarios, including
+   healthy responsiveness and delayed/failing operations.
+5. Request the planned live checkpoint only after the combined implementation is
+   ready: three three-item sessions and six correct handoffs, no duplicate starts,
+   plus interruption and recovery checks. Record actual local stop acknowledgement
+   and observed stop latency separately from their one-second/ten-second targets.
+
+M2b closes only after that composed behavior passes. MCP, subscription services,
+Cueby's recommendations and the optional Chirp interface remain later milestones.

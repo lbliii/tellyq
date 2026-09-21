@@ -17,8 +17,16 @@ regression also passed; M1 is accepted at that commit. Unknown ad state still
 limits strict receiver playback proof, as recorded separately from visual evidence.
 See the [acceptance record](M1-ACCEPTANCE.md).
 
-Milo/MCP, Chirp, a persistent runner, SQLite and a `src/` layout are future work;
-none is required to finish the current one-program core.
+M2a added a SQLite queue/command-journal foundation, continuous lifecycle replay,
+verified pause/resume, provider-qualified completion and a repeatable checkpoint
+runner. The merged tree at `6aec896` passed 666 tests; three supported live endings
+across two titles are recorded in the [checkpoint](M2A-CHECKPOINT.md). Queue
+intent/history remains separate from current playback evidence.
+
+The [M2b swarm](M2B-PLAN.md) now implements pure queue decisions, durable dispatch
+and a persistent owner/mailbox as independent components. Their foreground CLI/IPC
+and automatic handoff composition follow review and merge. Milo/MCP, Chirp and a
+`src/` layout remain later work.
 
 ## Design decision
 

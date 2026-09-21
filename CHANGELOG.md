@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record merged M2a acceptance at `6aec896` and begin the M2b component swarm for
+  queue decisions, durable dispatch/recovery and persistent ownership. Foreground
+  CLI/IPC integration and automatic handoff acceptance follow this first wave.
+
 - Interpret a finite set of source-qualified YouTube player states and attribute
   valid incremental terminals through ordered content history. Preserve a separate
   historical completion witness, invalidate uncertain chains, and keep routine

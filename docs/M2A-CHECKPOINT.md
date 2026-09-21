@@ -330,3 +330,12 @@ freshness or use an old witness to launch another item. M2b must integrate durab
 intent and recovery, consume one completion once, cancel pending work on stop,
 and hold on provider replacement rather than competing with it. No persistent
 queue runner, automatic handoff or unattended queue acceptance has been delivered.
+
+## Merged checkpoint (`6aec896`)
+
+PRs #20–22 merged on 2026-09-21. Actual `main` at `6aec896` has the same tree as
+reviewed final integration `a82cb17`; a fresh locked Python 3.14 `poe check` passed
+666 tests, Ruff, formatting and ty. The live-tested implementation remains
+unchanged. No new hardware run occurred during the pull/verification. M2a's
+lifecycle-signal result above is now on merged main, and the
+[M2b component swarm](M2B-PLAN.md) is the next implementation step.
