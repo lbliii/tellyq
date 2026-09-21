@@ -247,7 +247,7 @@ Every PR targets `main`; no branch requires an unmerged sibling to pass its test
 | --- | --- | --- |
 | Handoff diagnosis | [PR #31](https://github.com/lbliii/tellyq/pull/31), `codex/m2-handoff-diagnostics` | Typed, sanitized hold reasons and evidence through cached status; replay actual ending/reset shapes and retain takeover/ad vetoes. Repair only behavior supported by evidence. Unknown code 5 is not reinterpreted by numeric coincidence. |
 | Stop responsiveness | [PR #30](https://github.com/lbliii/tellyq/pull/30), `codex/m2-stop-latency` | Return once sufficient correlated stop evidence is available, preserving the observation deadline, ownership checks and queued contradictions. Keep command acknowledgement separate from verified outcome. |
-| Recovery and acceptance | `codex/m2-recovery-acceptance` | Composed crash-boundary tests and an explicit, bounded service checkpoint tool with reproducible timing and a sanitized record. No hardware effects in normal tests. |
+| Recovery and acceptance | [PR #32](https://github.com/lbliii/tellyq/pull/32), `codex/m2-recovery-acceptance` | Composed crash-boundary tests and an explicit, bounded service checkpoint tool with reproducible timing and a sanitized record. No hardware effects in normal tests. |
 
 Shared protocol/JSON changes are coordinated, and the exact combined candidate
 must pass lint, formatting, types, offline tests and packaging/install checks.
@@ -273,3 +273,30 @@ Acceptance proceeds in this order:
 The final commit-specific acceptance record must identify the tested revision,
 observed transitions, delays, recovery outcomes, visual confirmations and remaining
 limits. M3 CLI/MCP work begins after this gate, not as a substitute for it.
+
+
+## Closing-stream validation
+
+The independently tested heads were combined without conflicts in an isolated
+checkout. Exact code candidate `98ec6702daf48f3d6db69c8a0ee45436ccc8df66`, tree
+`e9d120b979207f717dbcb9f6dd58a132f4bafd9e`, passes locked Python 3.14 `poe ci`:
+1,089 tests, 90.7% branch-inclusive coverage, Ruff, formatting, ty, source/wheel
+builds and isolated installation.
+
+| Independent PR | Tested code head |
+| --- | --- |
+| [Stop responsiveness #30](https://github.com/lbliii/tellyq/pull/30) | `7e8d8014bdad95feaebf41098204b232c8d34e10` |
+| [Handoff diagnostics #31](https://github.com/lbliii/tellyq/pull/31) | `db3322484cbce791e666b86c2d41dc35feacc30b` |
+| [Recovery and acceptance #32](https://github.com/lbliii/tellyq/pull/32) | `293e9fe0fe0f20de14f1988c578de2df22c72544` |
+
+The recovery branch independently passes 994 tests and preflight. Its private
+service checkpoint correlates command timing to the canonical ticket and attempt;
+failed/canceled tickets and another client's same-action receipt cannot supply
+verification. Five actual process-loss scenarios preserve uncertain work without
+replay, and a synthetic three-item service run observes two handoffs. See the
+[acceptance procedure and evidence limits](M2-ACCEPTANCE.md).
+
+PRs #30 and #31 also passed their Python 3.14 macOS/Linux GitHub workflows.
+This record is a documentation-only follow-up to the exact tested code heads.
+No hardware ran for these closing streams. The live three-session gate above and
+the previous measured stop-target miss remain open; test success does not accept M2.
