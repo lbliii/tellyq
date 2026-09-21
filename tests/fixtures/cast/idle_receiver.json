@@ -1,0 +1,21 @@
+{
+  "provenance": "synthetic; hand-authored from reported field names and Open Screen source; no device capture",
+  "message": {
+    "type": "RECEIVER_STATUS",
+    "requestId": 41,
+    "status": {
+      "isActiveInput": true,
+      "isStandBy": false,
+      "userEq": {},
+      "volume": {"level": 0.4, "muted": false}
+    }
+  },
+  "expected": {
+    "kind": "receiver",
+    "app_id": null,
+    "app_name": null,
+    "app_session_id": null,
+    "active_input": true,
+    "standby": false
+  }
+}

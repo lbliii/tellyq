@@ -91,7 +91,37 @@ def media_observation(data: object) -> Observation:
     }
 
 
-def _receiver_observation(data: object) -> Observation:
+def _solicited_idle_status(data: object, request_id: int | None) -> bool:
+    """Accept the no-app GET_STATUS shape only with transport-owned correlation.
+
+    Open Screen omits applications when idle, but still supplies userEq and
+    volume. Missing metadata in an unsolicited/partial update is not app exit.
+    """
+    if (
+        _integer(request_id) is None
+        or request_id is None
+        or request_id <= 0
+        or _integer(_field(data, "requestId")) != request_id
+    ):
+        return False
+    status = _field(data, "status")
+    if not _is_object(status) or "applications" in status:
+        return False
+    volume = _field(status, "volume")
+    level = _seconds(_field(volume, "level"))
+    return (
+        _is_object(_field(status, "userEq"))
+        and level is not None
+        and level <= 1
+        and _boolean(_field(volume, "muted")) is not None
+        and all(
+            field not in status or _boolean(status[field]) is not None
+            for field in ("isActiveInput", "isStandBy")
+        )
+    )
+
+
+def _receiver_observation(data: object, request_id: int | None) -> Observation:
     status = _field(data, "status")
     apps = _field(status, "applications")
     app = _first(apps)
@@ -99,7 +129,7 @@ def _receiver_observation(data: object) -> Observation:
     session_id = _text(_field(app, "sessionId"))
     if not isinstance(status, dict):
         reason = "INVALID_STATUS"
-    elif not isinstance(apps, list):
+    elif not isinstance(apps, list) and not _solicited_idle_status(data, request_id):
         reason = "INVALID_APPLICATIONS"
     elif apps and (app_id is None or session_id is None):
         reason = "INVALID_APPLICATION_IDENTITY"
@@ -107,7 +137,7 @@ def _receiver_observation(data: object) -> Observation:
         reason = None
     if reason is not None:
         # The legacy stop policy interprets receiver app_id=None as app exit.
-        # Only an explicit, valid empty applications list can carry that meaning.
+        # Require an explicit empty list or a correlated, validated idle reply.
         return {"kind": "error", "type": "INVALID_RECEIVER_STATUS", "reason": reason, "code": None}
     return {
         "kind": "receiver",
@@ -119,17 +149,21 @@ def _receiver_observation(data: object) -> Observation:
     }
 
 
-def normalize_message(data: object) -> Observation | None:
+def normalize_message(
+    data: object, *, receiver_status_request_id: int | None = None
+) -> Observation | None:
     """Return a fresh scalar-only record, or None for an unrecognized message.
 
     Only allowlisted fields cross the callback boundary. Error reasons retain
     symbolic protocol codes, never free-form diagnostics or credential URLs.
+    The optional request ID must come from a current GET_STATUS poll owned by
+    the transport, never from an untrusted incoming message alone.
     """
     message_type = _text(_field(data, "type"))
     if message_type == "MEDIA_STATUS":
         return media_observation(data)
     if message_type == "RECEIVER_STATUS":
-        return _receiver_observation(data)
+        return _receiver_observation(data, receiver_status_request_id)
     if message_type in {"LOAD_FAILED", "LAUNCH_ERROR"}:
         reason = _text(_field(data, "reason"))
         return {

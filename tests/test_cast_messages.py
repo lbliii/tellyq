@@ -6,10 +6,15 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Queue
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+from pychromecast.controllers.receiver import ReceiverController
+from pychromecast.generated.cast_channel_pb2 import CastMessage
+from pychromecast.socket_client import ConnectionStatus, NetworkAddress, SocketClient
 
-from tellyq.cast import MEDIA, RECEIVER, Observer
+from tellyq.cast import MEDIA, RECEIVER, Connection, Observer
 from tellyq.cast_messages import media_observation, normalize_message
 from tellyq.models import Observation
 
@@ -28,7 +33,7 @@ def test_synthetic_trace_replays_through_parser_and_callback():
         event = events.get_nowait()
         assert isinstance(event.pop("observed_at"), str)
         assert isinstance(event.pop("monotonic"), float)
-        assert event == case["expected"], case["name"]
+        assert event == case.get("expected_callback", case["expected"]), case["name"]
     assert events.empty()
 
 
@@ -153,6 +158,329 @@ def test_valid_empty_applications_still_reports_app_exit():
         "active_input": False,
         "standby": None,
     }
+
+
+@pytest.fixture
+def idle_fixture():
+    value = json.loads((FIXTURES / "idle_receiver.json").read_text())
+    assert value["provenance"] == (
+        "synthetic; hand-authored from reported field names and Open Screen source; no device capture"
+    )
+    return value
+
+
+def test_idle_receiver_requires_request_correlation(idle_fixture):
+    message = idle_fixture["message"]
+    passive = normalize_message(message)
+    assert passive is not None and passive["kind"] == "error"
+    assert normalize_message(message, receiver_status_request_id=41) == idle_fixture["expected"]
+    for request_id in (None, False, True, -1, 0, 40, 42):
+        event = normalize_message(message, receiver_status_request_id=request_id)
+        assert event is not None
+        assert event["kind"] == "error"
+        assert "app_id" not in event
+
+
+@pytest.mark.parametrize("request_id", [None, False, True, 41.0, "41", 0, -1, 42])
+def test_idle_receiver_invalid_response_id_stays_unknown(idle_fixture, request_id):
+    message = idle_fixture["message"]
+    message["requestId"] = request_id
+    event = normalize_message(message, receiver_status_request_id=41)
+    assert event is not None
+    assert event["kind"] == "error"
+    assert "app_id" not in event
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        None,
+        {},
+        {"isActiveInput": True, "isStandBy": False},
+        {"userEq": {}},
+        {"volume": {"level": 0.4, "muted": False}},
+        {"userEq": [], "volume": {"level": 0.4, "muted": False}},
+        {"userEq": {}, "volume": {}},
+        {"userEq": {}, "volume": {"level": 0.4}},
+        {"userEq": {}, "volume": {"level": True, "muted": False}},
+        {"userEq": {}, "volume": {"level": float("inf"), "muted": False}},
+        {"userEq": {}, "volume": {"level": 1.1, "muted": False}},
+        {"userEq": {}, "volume": {"level": -0.1, "muted": False}},
+        {"userEq": {}, "volume": {"level": 0.4, "muted": 0}},
+    ],
+)
+def test_solicited_partial_or_malformed_idle_receiver_stays_unknown(idle_fixture, status):
+    message = idle_fixture["message"]
+    message["status"] = status
+    event = normalize_message(message, receiver_status_request_id=41)
+    assert event is not None
+    assert event["kind"] == "error"
+    assert "app_id" not in event
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("applications", None), ("applications", {}), ("isActiveInput", 1), ("isStandBy", None)],
+)
+def test_solicited_idle_does_not_hide_invalid_explicit_fields(idle_fixture, field, value):
+    message = idle_fixture["message"]
+    message["status"][field] = value
+    event = normalize_message(message, receiver_status_request_id=41)
+    assert event is not None and event["kind"] == "error"
+
+
+def test_openscreen_idle_shape_without_optional_input_fields(idle_fixture):
+    message = idle_fixture["message"]
+    del message["status"]["isActiveInput"]
+    del message["status"]["isStandBy"]
+    event = normalize_message(message, receiver_status_request_id=41)
+    assert event is not None
+    assert event["kind"] == "receiver"
+    assert event["app_id"] is None
+    assert event["active_input"] is None
+    assert event["standby"] is None
+
+
+@pytest.fixture
+def status_transport(monkeypatch):
+    events: Queue[Observation] = Queue()
+    observer = Observer(RECEIVER, events)
+    clock = SimpleNamespace(time=100.0)
+    monkeypatch.setattr("tellyq.cast.monotonic", lambda: clock.time)
+    requests = []
+
+    def send(request):
+        request["requestId"] = 41 + len(requests)
+        requests.append(request)
+
+    receiver = Mock(spec=ReceiverController)
+    receiver.send_message.side_effect = send
+    return SimpleNamespace(
+        events=events, observer=observer, receiver=receiver, requests=requests, clock=clock
+    )
+
+
+def test_poll_response_can_arrive_before_send_returns(status_transport, idle_fixture):
+    transport = status_transport
+
+    def send(request):
+        request["requestId"] = 41
+        # A different callback thread must not deadlock on the sending thread's
+        # observation lock. The response can beat send_message's return.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(
+                transport.observer.receive_message, None, idle_fixture["message"]
+            ).result(timeout=2)
+
+    transport.receiver.send_message.side_effect = send
+    transport.observer.request_status(transport.receiver, deadline=102)
+    event = transport.events.get_nowait()
+    assert event.pop("monotonic") == 100
+    assert isinstance(event.pop("observed_at"), str)
+    assert event == idle_fixture["expected"]
+    assert transport.events.empty()
+    # A duplicate of the consumed response cannot provide another idle proof.
+    transport.observer.receive_message(None, idle_fixture["message"])
+    assert transport.events.get_nowait()["kind"] == "error"
+
+
+@pytest.mark.parametrize(
+    "retirement", ["expiry", "cancel", "disconnect", "socket-transition", "supersede"]
+)
+def test_retired_poll_cannot_turn_late_response_into_idle_proof(
+    status_transport, idle_fixture, retirement
+):
+    transport = status_transport
+    transport.observer.request_status(transport.receiver, deadline=102)
+    if retirement == "expiry":
+        transport.clock.time = 102
+    elif retirement == "cancel":
+        transport.observer.cancel_status_request()
+    elif retirement == "disconnect":
+        transport.observer.channel_disconnected()
+    elif retirement == "socket-transition":
+        transport.observer.new_connection_status(ConnectionStatus("LOST", None, None))
+        assert transport.events.get_nowait()["type"] == "CONNECTION_RESET"
+    else:
+        transport.observer.request_status(transport.receiver, deadline=102)
+    transport.observer.receive_message(None, idle_fixture["message"])
+    assert transport.events.get_nowait()["kind"] == "error"
+    if retirement == "supersede":
+        idle_fixture["message"]["requestId"] = 42
+        transport.observer.receive_message(None, idle_fixture["message"])
+        assert transport.events.get_nowait()["kind"] == "receiver"
+
+
+@pytest.mark.parametrize("state", ["LOST", "DISCONNECTED", "CONNECTING", "CONNECTED"])
+def test_connection_transitions_retire_poll_and_publish_only_scalar_reset_evidence(
+    status_transport, idle_fixture, state
+):
+    transport = status_transport
+    transport.observer.request_status(transport.receiver, deadline=102)
+    transport.observer.new_connection_status(
+        ConnectionStatus(state, NetworkAddress("synthetic.invalid", 8009), None)
+    )
+    if state != "CONNECTED":
+        event = transport.events.get_nowait()
+        assert isinstance(event.pop("observed_at"), str)
+        assert event == {
+            "kind": "error",
+            "type": "CONNECTION_RESET",
+            "reason": state,
+            "code": None,
+            "monotonic": 100,
+        }
+        assert "synthetic.invalid" not in json.dumps(event)
+    assert transport.events.empty()
+    transport.observer.receive_message(None, idle_fixture["message"])
+    assert transport.events.get_nowait()["kind"] == "error"
+
+
+def test_wrong_request_id_and_unrelated_message_do_not_consume_poll(status_transport, idle_fixture):
+    transport = status_transport
+    transport.observer.request_status(transport.receiver, deadline=102)
+    transport.observer.receive_message(None, {"type": "MEDIA_STATUS", "status": []})
+    assert transport.events.get_nowait()["kind"] == "media"
+    for request_id in (40, True, 41.0, "41"):
+        transport.observer.receive_message(
+            None, {**idle_fixture["message"], "requestId": request_id}
+        )
+        assert transport.events.get_nowait()["kind"] == "error"
+    transport.observer.receive_message(None, idle_fixture["message"])
+    assert transport.events.get_nowait()["kind"] == "receiver"
+
+
+@pytest.mark.parametrize("retirement", ["none", "expiry", "cancel", "supersede"])
+def test_explicit_empty_application_list_requires_current_poll_at_transport(
+    status_transport, retirement
+):
+    transport = status_transport
+    transport.observer.request_status(transport.receiver, deadline=102)
+    if retirement == "expiry":
+        transport.clock.time = 102
+    elif retirement == "cancel":
+        transport.observer.cancel_status_request()
+    elif retirement == "supersede":
+        transport.observer.request_status(transport.receiver, deadline=102)
+    transport.observer.receive_message(
+        None, {"type": "RECEIVER_STATUS", "requestId": 41, "status": {"applications": []}}
+    )
+    event = transport.events.get_nowait()
+    if retirement == "none":
+        assert event["kind"] == "receiver"
+        assert event["app_id"] is None
+    else:
+        assert event["kind"] == "error"
+        assert event["reason"] == "UNCORRELATED_APP_ABSENCE"
+
+
+def test_unsolicited_explicit_empty_applications_cannot_prove_stop(status_transport):
+    transport = status_transport
+    transport.observer.receive_message(
+        None, {"type": "RECEIVER_STATUS", "status": {"applications": []}}
+    )
+    event = transport.events.get_nowait()
+    assert event["kind"] == "error"
+    assert event["reason"] == "UNCORRELATED_APP_ABSENCE"
+
+
+def test_correlated_partial_reply_consumes_poll_without_reusing_old_identity(status_transport):
+    transport = status_transport
+    transport.observer.request_status(transport.receiver, deadline=102)
+    transport.observer.receive_message(None, {"type": "RECEIVER_STATUS", "requestId": 41})
+    assert transport.events.get_nowait()["kind"] == "error"
+    assert transport.observer._status_request is None
+
+
+def test_poll_send_failure_retires_assigned_request(status_transport, idle_fixture):
+    transport = status_transport
+
+    def fail(request):
+        request["requestId"] = 41
+        raise OSError("synthetic send failure")
+
+    transport.receiver.send_message.side_effect = fail
+    with pytest.raises(OSError, match="synthetic send failure"):
+        transport.observer.request_status(transport.receiver, deadline=102)
+    transport.observer.receive_message(None, idle_fixture["message"])
+    assert transport.events.get_nowait()["kind"] == "error"
+
+
+@pytest.mark.parametrize("fails", [False, True])
+@pytest.mark.parametrize("explicit_empty", [False, True])
+def test_observe_retires_baseline_poll_before_next_window(
+    monkeypatch, status_transport, idle_fixture, fails, explicit_empty
+):
+    transport = status_transport
+    connection = Connection.__new__(Connection)
+    connection.events = transport.events
+    connection.receiver_observer = transport.observer
+    cast = Mock()
+    cast.socket_client.receiver_controller = transport.receiver
+    cast.media_controller.is_active = True
+    connection.cast = cast
+
+    def wait(_seconds):
+        transport.clock.time = 102
+        if fails:
+            raise OSError("synthetic observation failure")
+
+    monkeypatch.setattr("tellyq.cast.Event", lambda: SimpleNamespace(wait=wait))
+    if fails:
+        with pytest.raises(OSError, match="synthetic observation failure"):
+            connection.observe(2)
+    else:
+        assert connection.observe(2) == []
+    cast.media_controller.update_status.assert_called_once_with()
+    transport.clock.time = 103
+    if explicit_empty:
+        idle_fixture["message"]["status"] = {"applications": []}
+    transport.observer.receive_message(None, idle_fixture["message"])
+    assert connection.drain()[0]["kind"] == "error"
+
+
+def test_pinned_pychromecast_send_path_injects_id_before_socket_write(
+    status_transport, idle_fixture
+):
+    """Exercise real 14.0.10 send methods with only socket I/O mocked."""
+    transport = status_transport
+    client = Mock(spec=SocketClient)
+    client._gen_request_id.return_value = 41
+    client.stop = Mock()
+    client.stop.is_set.return_value = False
+    client.connecting = False
+    client._force_recon = False
+    client.source_id = "synthetic-sender"
+    client.logger = Mock()
+    client.fn = "Synthetic receiver"
+    client.host = "synthetic.invalid"
+    client.port = 8009
+    client.socket = Mock()
+    client.send_message.side_effect = lambda *args, **kwargs: SocketClient.send_message(
+        client, *args, **kwargs
+    )
+    client.send_platform_message.side_effect = lambda *args, **kwargs: (
+        SocketClient.send_platform_message(client, *args, **kwargs)
+    )
+
+    def socket_write(packet):
+        wire = CastMessage.FromString(packet[4:])
+        assert wire.namespace == RECEIVER
+        assert json.loads(wire.payload_utf8) == {"type": "GET_STATUS", "requestId": 41}
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(
+                transport.observer.receive_message, wire, idle_fixture["message"]
+            ).result(timeout=2)
+
+    client.socket.sendall.side_effect = socket_write
+    receiver = ReceiverController()
+    client.receiver_controller = receiver
+    receiver.registered(client)
+    transport.observer.request_status(receiver, deadline=102)
+    event = transport.events.get_nowait()
+    assert event["kind"] == "receiver"
+    assert event["app_id"] is None
+    assert transport.events.empty()
 
 
 def test_explicit_empty_media_is_distinct_from_unknown_status():
