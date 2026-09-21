@@ -23,7 +23,17 @@ from .domain.values import (
     PlayerState,
     SessionSnapshot,
 )
-from .handoff import ReleaseAuthority, may_release, track_release
+from .handoff import (
+    HandoffDiagnostic,
+    HandoffDisposition,
+    HandoffReason,
+    HandoffStage,
+    ReleaseAuthority,
+    handoff_evidence,
+    may_release,
+    release_decision,
+    track_release,
+)
 from .queue_execution import QueueCommandRequest, QueueDispatch, QueueExecutor
 from .runner import Cancellation, RunnerCommand, TaskView
 
@@ -128,6 +138,7 @@ class PlaybackTask:
         self._authority: QueueAuthority | None = None
         self._playback: SessionSnapshot | None = None
         self._release: ReleaseAuthority | None = None
+        self._release_refusal: HandoffDiagnostic | None = None
         self._events: tuple[PlaybackObservation, ...] = ()
         self._dispatch: QueueDispatch | None = None
         self._cancellation: Cancellation | None = None
@@ -163,7 +174,84 @@ class PlaybackTask:
         return queue
 
     def _view(self) -> TaskView:
-        return TaskView(self._playback, self._load())
+        queue = self._load()
+        return TaskView(self._playback, queue, self._handoff(queue))
+
+    def _handoff(self, queue: QueueSnapshot) -> HandoffDiagnostic:
+        owned, authority = self._playback, self._release
+
+        def report(
+            stage: HandoffStage,
+            reason: HandoffReason,
+            disposition: HandoffDisposition = HandoffDisposition.HOLD,
+        ) -> HandoffDiagnostic:
+            return HandoffDiagnostic(
+                stage,
+                disposition,
+                reason,
+                handoff_evidence(
+                    owned,
+                    self._events[-1] if self._events else None,
+                    authority,
+                    now=self.clock.monotonic(),
+                )
+                if owned
+                else None,
+                authority.first_veto if authority else None,
+            )
+
+        if queue.cancellation_requested or (self._cancellation and self._cancellation.requested):
+            return report(HandoffStage.QUEUE, HandoffReason.CANCELED)
+        if not self._started:
+            return report(HandoffStage.QUEUE, HandoffReason.AWAITING_START)
+        if owned is None or not queue.attempts:
+            return report(HandoffStage.QUEUE, HandoffReason.SESSION_REQUIRED)
+        attempt = queue.attempts[-1]
+        if owned.ownership_lost and attempt.intent == QueueIntent.CURRENT:
+            return report(HandoffStage.QUEUE, HandoffReason.OWNERSHIP_LOST)
+        if attempt.intent == QueueIntent.CURRENT:
+            return report(HandoffStage.QUEUE, HandoffReason.AWAITING_COMPLETION)
+        if attempt.intent != QueueIntent.FINISHED:
+            return report(HandoffStage.QUEUE, HandoffReason.ATTEMPT_NOT_FINISHED)
+        stage = HandoffStage.SUCCESSOR if owned.release_confirmed else HandoffStage.RELEASE
+        if owned.ownership_lost:
+            return report(stage, HandoffReason.OWNERSHIP_LOST)
+        if authority is None:
+            return report(stage, HandoffReason.AUTHORITY_REQUIRED)
+        if authority.blocked:
+            return report(stage, HandoffReason.AUTHORITY_BLOCKED)
+        releases = [
+            entry
+            for entry in queue.commands
+            if entry.attempt_id == attempt.attempt_id and entry.action == CommandAction.RELEASE
+        ]
+        if not owned.release_confirmed:
+            if self._release_refusal is not None:
+                return self._release_refusal
+            if releases:
+                release = releases[-1]
+                if release.state == ExecutionState.REJECTED:
+                    return report(stage, HandoffReason.RELEASE_REJECTED)
+                if release.state != ExecutionState.ACKNOWLEDGED:
+                    return report(stage, HandoffReason.RELEASE_UNRESOLVED)
+                return report(stage, HandoffReason.AWAITING_RELEASE_IDLE)
+            return release_decision(owned, authority, self._events, now=self.clock.monotonic())
+        if not releases or releases[-1].state != ExecutionState.ACKNOWLEDGED:
+            return report(stage, HandoffReason.RELEASE_UNRESOLVED)
+        if not self._idle():
+            return report(stage, HandoffReason.AWAITING_FRESH_IDLE)
+        decision = decide_queue(
+            queue,
+            owned,
+            now=self.clock.monotonic(),
+            authority=self._authority,
+            receiver=self._events[-1],
+        )
+        if decision.disposition == QueueDisposition.READY:
+            return report(stage, HandoffReason.SUCCESSOR_ELIGIBLE, HandoffDisposition.READY)
+        if decision.disposition == QueueDisposition.COMPLETE:
+            return report(stage, HandoffReason.EXHAUSTED, HandoffDisposition.COMPLETE)
+        return replace(report(stage, HandoffReason.QUEUE_POLICY_HOLD), queue_reason=decision.reason)
 
     def _cancel(self, cancellation: Cancellation) -> bool:
         self._cancellation = cancellation
@@ -215,6 +303,7 @@ class PlaybackTask:
                 != result.snapshot.scope.request.attempt_id
             ):
                 self._release = None
+                self._release_refusal = None
             self._playback = result.snapshot
         elif self._playback is not None:
             previous = self._playback
@@ -248,6 +337,15 @@ class PlaybackTask:
                     if self._app.last_result is not None:
                         raise
                     self._accept(PlaybackResult(self._events))
+                    if action == CommandAction.RELEASE and self._playback is not None:
+                        diagnosis = release_decision(
+                            self._playback,
+                            self._release,
+                            self._events,
+                            now=self.clock.monotonic(),
+                        )
+                        if diagnosis.disposition == HandoffDisposition.HOLD:
+                            self._release_refusal = diagnosis
                     return CommandReceipt(
                         command_id,
                         request.attempt_id,

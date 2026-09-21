@@ -26,6 +26,7 @@ from .domain.values import (
     SessionSnapshot,
     require_instant,
 )
+from .handoff import HandoffDiagnostic
 
 
 class RunnerPhase(StrEnum):
@@ -69,6 +70,7 @@ class RunnerTimeout(TimeoutError):
 class TaskView:
     playback: SessionSnapshot | None = None
     queue: QueueSnapshot | None = None
+    handoff: HandoffDiagnostic | None = None
 
 
 @dataclass(frozen=True, slots=True)

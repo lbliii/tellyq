@@ -25,6 +25,7 @@ from tellyq.domain.values import (
     ProviderEvidence,
     Support,
 )
+from tellyq.handoff import HandoffDisposition, HandoffReason, HandoffStage
 from tellyq.playback_task import PlaybackTask
 from tellyq.queue_execution import OutcomePersistenceError, QueueCommandRequest
 from tellyq.queue_store import QueueStoreError, SQLiteQueueStore
@@ -264,6 +265,9 @@ def test_terminal_and_replacement_in_one_batch_settles_but_never_releases(rig):
     result = task.step(cancellation)
     assert result.queue.items[0].intent == QueueIntent.FINISHED
     assert result.playback.ownership_lost
+    assert result.handoff.stage == HandoffStage.RELEASE
+    assert result.handoff.reason == HandoffReason.OWNERSHIP_LOST
+    assert result.handoff.first_veto.reason == HandoffReason.CONTENT_CHANGED
     task.step(cancellation)
     assert [a for a, _ in backend.commands] == ["start"]
 
@@ -294,6 +298,21 @@ def test_post_terminal_hazards_hold_without_release_or_successor(rig, hazard):
     assert result.playback.completion is not None
     assert not result.playback.release_confirmed
     assert [a for a, _ in backend.commands] == ["start"]
+    assert result.handoff.stage == HandoffStage.RELEASE
+    assert result.handoff.disposition == HandoffDisposition.HOLD
+    if hazard == "omitted":
+        assert result.handoff.reason == HandoffReason.MEDIA_IDENTITY_MISSING
+        # Later repaired identity cannot hide the original refused release; no retry.
+        backend.omit_identity = False
+        assert task.step(cancellation).handoff.reason == HandoffReason.MEDIA_IDENTITY_MISSING
+    else:
+        expected = {
+            "code5-reset": HandoffReason.POSITION_REWOUND,
+            "ad": HandoffReason.AD_ACTIVE,
+            "replay": HandoffReason.PLAYBACK_RESTARTED,
+            "connection": HandoffReason.CONNECTION_CHANGED,
+        }
+        assert result.handoff.first_veto.reason == expected[hazard]
 
 
 @pytest.mark.parametrize(
@@ -691,3 +710,91 @@ def test_release_snapshot_persistence_failure_holds_even_with_accepted_remote_re
     assert result.queue.cancellation_requested
     assert result.queue.items[1].intent == QueueIntent.PENDING
     assert [a for a, _ in backend.commands] == ["start", "stop"]
+
+
+def test_handoff_view_names_stage_and_eligibility_separately_from_dispatch(rig):
+    task, backend, _, cancellation, _, _ = rig
+    assert task.step(cancellation).handoff.reason == HandoffReason.AWAITING_START
+    assert start(task, cancellation).handoff.reason == HandoffReason.AWAITING_COMPLETION
+    backend.finish()
+    settled = task.step(cancellation)
+    assert settled.handoff.stage == HandoffStage.RELEASE
+    assert settled.handoff.disposition == HandoffDisposition.READY
+    assert settled.handoff.reason == HandoffReason.RELEASE_ELIGIBLE
+    assert backend.commands == [("start", ITEMS[0].content.content_id)]
+    released = task.step(cancellation)
+    assert released.handoff.stage == HandoffStage.SUCCESSOR
+    assert released.handoff.reason == HandoffReason.SUCCESSOR_ELIGIBLE
+    assert len([a for a, _ in backend.commands if a == "start"]) == 1
+    started = task.step(cancellation)
+    assert started.handoff.reason == HandoffReason.AWAITING_COMPLETION
+    assert started.handoff.first_veto is None
+    assert len([a for a, _ in backend.commands if a == "start"]) == 2
+
+
+def test_sticky_veto_and_later_cancellation_have_separate_diagnostics(rig):
+    task, backend, _, cancellation, event, _ = rig
+    start(task, cancellation)
+    backend.finish()
+    task.step(cancellation)
+    backend.position, backend.ad, backend.state, backend.phase = (
+        0,
+        None,
+        PlayerState.BUFFERING,
+        ContentPhase.UNKNOWN,
+    )
+    held = task.step(cancellation)
+    veto = held.handoff.first_veto
+    assert veto.reason == HandoffReason.POSITION_REWOUND
+    event.set()
+    canceled = task.step(cancellation)
+    assert canceled.handoff.stage == HandoffStage.QUEUE
+    assert canceled.handoff.reason == HandoffReason.CANCELED
+    assert canceled.handoff.first_veto == veto
+    assert canceled.queue.items[1].intent == QueueIntent.PENDING
+    assert [a for a, _ in backend.commands] == ["start"]
+
+
+def test_unobserved_release_idle_has_distinct_hold_reason(rig):
+    task, backend, _, cancellation, _, _ = rig
+    start(task, cancellation)
+    backend.finish()
+    task.step(cancellation)
+    backend.stop_idle = False
+    held = task.step(cancellation)
+    assert held.handoff.reason == HandoffReason.AWAITING_RELEASE_IDLE
+    assert held.handoff.first_veto is None
+
+
+def test_expired_terminal_reason_retains_its_age(rig):
+    task, backend, _, cancellation, _, _ = rig
+    start(task, cancellation)
+    backend.finish()
+    task.step(cancellation)
+    backend.clock.tick(5.01)
+    # Public view remains read-only: it names stale authority without observing anew.
+    view = task._view()
+    assert view.handoff.reason == HandoffReason.TERMINAL_STALE
+    assert view.handoff.evidence.age_seconds > 5
+    assert [a for a, _ in backend.commands] == ["start"]
+
+
+def test_current_attempt_takeover_diagnostic_does_not_claim_awaiting_completion(rig):
+    task, backend, _, cancellation, _, _ = rig
+    start(task, cancellation)
+    backend.next_batch = lambda: (
+        backend.event(
+            session_id="session",
+            application_id="app",
+            playback_id="media",
+            content=ITEMS[1].content,
+            state=PlayerState.PLAYING,
+        ),
+    )
+    held = task.step(cancellation)
+    assert held.queue.attempts[-1].intent == QueueIntent.CURRENT
+    assert held.playback.ownership_lost
+    assert held.handoff.stage == HandoffStage.QUEUE
+    assert held.handoff.reason == HandoffReason.OWNERSHIP_LOST
+    assert held.handoff.evidence.content_matches is False
+    assert [a for a, _ in backend.commands] == ["start"]
