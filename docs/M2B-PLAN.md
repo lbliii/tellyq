@@ -51,6 +51,15 @@ replacement must hold the queue. Fresh current evidence is required before a
 new launch. Explicit skip is separate from finished and never implies a remote
 stop occurred.
 
+Cross-component review identified a handoff boundary for the composition wave:
+`prepare_stop` cancels the queue, accepts only an unresolved attempt, and prevents
+that attempt from being settled as FINISHED. Operator stop therefore cannot double
+as between-item receiver cleanup. When an ending is followed by unqualified
+buffering, the reducer must hold. The composed implementation needs a separately
+reviewed owned-session handoff/reconciliation contract if fresh terminal or idle
+evidence is unavailable; it must not weaken operator cancellation or unknown-ad
+rules to force the next launch.
+
 ### Durable local claims do not promise remote exactly-once delivery
 
 The executor reuses the existing SQLite store, including its strict atomic
