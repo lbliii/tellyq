@@ -1,5 +1,6 @@
 """Small structural contracts; implementations own I/O and thread safety."""
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
@@ -41,6 +42,25 @@ class PlaybackBackend(Protocol):
 
     def stop(self, scope: PlaybackScope) -> CommandReceipt:
         """Stop only the caller's still-owned session; refuse a replacement."""
+        ...
+
+
+@runtime_checkable
+class PlaybackObservationUntil(Protocol):
+    """Optional prompt observation; deadlines and evidence policy stay unchanged."""
+
+    def observe_until(
+        self,
+        target: PlaybackTarget,
+        ready: Callable[[tuple[PlaybackObservation, ...]], bool],
+    ) -> tuple[PlaybackObservation, ...]:
+        """Return on sufficient evidence or the ordinary observation deadline.
+
+        Evaluate ready on cumulative, ordered observations only after draining
+        already queued callbacks. Return every consumed observation, including
+        contradictions; readiness is a caller policy, never command acceptance.
+        Implementations without incremental observation may use observe instead.
+        """
         ...
 
 

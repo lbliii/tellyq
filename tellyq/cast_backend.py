@@ -1,6 +1,6 @@
 """Cast adapter: wire parsing, callback correlation and bounded device effects."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from math import isfinite
@@ -45,6 +45,20 @@ class PendingObservationTransport(Protocol):
     """Optional nonblocking access to already normalized callbacks after interrupted I/O."""
 
     def drain_pending(self) -> list[Observation]: ...
+
+
+@runtime_checkable
+class ObservationUntilTransport(Protocol):
+    """Deliver drained batches once, retaining the ordinary polling deadline.
+
+    ready receives newly consumed batches, not cumulative history. Every event
+    in the returned list must have been delivered to ready exactly once, in
+    order, including a final drain after retiring receiver correlation.
+    """
+
+    def observe_until(
+        self, seconds: float, ready: Callable[[list[Observation]], bool]
+    ) -> list[Observation]: ...
 
 
 def video_id(content_id: str | None) -> str | None:
@@ -338,6 +352,40 @@ class CastBackend:
         # Explicit start/control/stop keep their separate verification budgets.
         self._window = 2
         self._remember_raw(raw)
+        return self._normalize(target, raw)
+
+    def observe_until(
+        self,
+        target: PlaybackTarget,
+        ready: Callable[[tuple[PlaybackObservation, ...]], bool],
+    ) -> tuple[PlaybackObservation, ...]:
+        """Normalize entire drained batches before evaluating application evidence."""
+        self._target(target)
+        if not isinstance(self.transport, ObservationUntilTransport):
+            return self.observe(target)
+        result: list[PlaybackObservation] = []
+        consumed: list[Observation] = []
+
+        def receive(batch: list[Observation]) -> bool:
+            consumed.extend(batch)
+            result.extend(self._normalize(target, batch))
+            return ready(tuple(result))
+
+        try:
+            self.transport.observe_until(self._window, receive)
+        except Exception, KeyboardInterrupt:
+            if isinstance(self.transport, PendingObservationTransport):
+                with suppress(Exception, KeyboardInterrupt):
+                    consumed.extend(self.transport.drain_pending())
+            raise
+        finally:
+            self._window = 2
+            self._remember_raw(consumed)
+        return tuple(result)
+
+    def _normalize(
+        self, target: PlaybackTarget, raw: list[Observation]
+    ) -> tuple[PlaybackObservation, ...]:
         result: list[PlaybackObservation] = []
         for event in raw:
             instant = event.get("monotonic")
@@ -541,6 +589,11 @@ class _Transport:
 
     def observe(self, seconds: float) -> list[Observation]:
         return self.connection.observe(seconds)
+
+    def observe_until(
+        self, seconds: float, ready: Callable[[list[Observation]], bool]
+    ) -> list[Observation]:
+        return self.connection.observe_until(seconds, ready)
 
     def drain_pending(self) -> list[Observation]:
         return self.connection.drain()

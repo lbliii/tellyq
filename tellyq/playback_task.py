@@ -8,7 +8,13 @@ from uuid import uuid4
 
 from .application import ControlRefused, PlaybackApplication, PlaybackResult
 from .domain import policy
-from .domain.ports import Clock, PlaybackBackend, PlaybackControls, SessionStore
+from .domain.ports import (
+    Clock,
+    PlaybackBackend,
+    PlaybackControls,
+    PlaybackObservationUntil,
+    SessionStore,
+)
 from .domain.queue import ExecutionState, QueueIntent, QueueSnapshot, QueueStore
 from .domain.queue_policy import QueueAuthority, QueueDisposition, decide_queue
 from .domain.values import (
@@ -39,6 +45,21 @@ class _GuardedBackend:
 
     def observe(self, target: PlaybackTarget) -> tuple[PlaybackObservation, ...]:
         events = self.backend.observe(target)
+        return self._observed(events)
+
+    def observe_until(
+        self,
+        target: PlaybackTarget,
+        ready: Callable[[tuple[PlaybackObservation, ...]], bool],
+    ) -> tuple[PlaybackObservation, ...]:
+        events = (
+            self.backend.observe_until(target, ready)
+            if isinstance(self.backend, PlaybackObservationUntil)
+            else self.backend.observe(target)
+        )
+        return self._observed(events)
+
+    def _observed(self, events: tuple[PlaybackObservation, ...]) -> tuple[PlaybackObservation, ...]:
         self.task._events = events
         if self.task._playback is not None and self.task._playback.completion is not None:
             self.task._release = track_release(self.task._playback, events, self.task._release)
