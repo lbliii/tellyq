@@ -9,7 +9,8 @@ the supervised M2a checkpoint found terminal candidates but did not verify
 pause/resume or reliable completion. Repairs merged at `e4b2a91`; 531 offline
 tests and a live pause/resume/cleanup diagnostic passed. The user confirmed visible
 pause. Two focused metadata runs then identified a provider-state candidate.
-Completion remains blocked pending its interpretation and acceptance below.
+The completion batch implements its interpretation and ordered attribution, with
+a repeatable single-video checkpoint runner. Its acceptance is recorded below.
 See the [checkpoint and repair acceptance record](M2A-CHECKPOINT.md).
 
 ## First batch: prepare lifecycle experiments and durable state
@@ -119,12 +120,37 @@ BUFFERING. It observed no ad-specific codes. Tooling at `3a60058`
 ([PR #18](https://github.com/lbliii/tellyq/pull/18)) passed 566 tests, 93.3% coverage,
 lint/types/build/install and macOS/Linux CI. The live controller stayed on `e4b2a91`.
 
-The next work is a finite, source-qualified YouTube state interpretation and
-ordered content correlation, with explicit unknowns and offline regression cases
-before changing policy. Then run the full acceptance set. Another schema-only
+The next work identified by that investigation was a finite, source-qualified
+YouTube state interpretation and ordered content correlation, with explicit
+unknowns and offline regression cases before changing policy. Then run the full acceptance set. Another schema-only
 capture or Lounge probe is not the immediate next step. The research note retains
 Lounge as a bounded fallback if the candidate proves insufficient. No timer, UI,
 custom receiver, MCP layer or new hardware is introduced to bypass the gate.
+
+## M2a completion implementation
+
+The [completion plan](M2A-COMPLETION-PLAN.md) starts from merged `fe73b6d` and keeps
+two independently testable work streams: the coupled provider/domain completion
+contract, and a checkpoint runner using existing application interfaces. The
+coordinator owns source review, combined validation, live hardware and the ledger.
+
+The adapter interprets only a finite set of source-qualified YouTube states. The
+generic domain attributes qualified anonymous terminals through recent ordered
+content history without filling missing identity into the original observation.
+Ad context, unknown codes, contradictions, gaps, partial replay windows, changed
+sources, replacement and stop intent cannot authorize a new completion.
+
+A historical completion witness survives later observations independently of
+current ownership. Routine observation windows now fit within the freshness
+contract. The checkpoint runner records intent, receipts, all observations and
+the first completion witness before guarded cleanup; it never advances a queue.
+
+Exact candidate `2599345` passed 666 offline tests, packaging and installation,
+then three natural endings across two titles with one verified pause/resume.
+The user confirmed the pause and resume. A later ad-specific code and replacement
+were captured; the original completion survived and cleanup refused replacement.
+See the ledger for the nonzero cleanup outcome, visual evidence and untested cases.
+Implementation can proceed to M2b after merge and merged-tree verification.
 
 ## M2b: one persistent playback owner
 
@@ -185,7 +211,7 @@ handoff or stop-latency acceptance run occurred in this batch.
 | --- | --- | --- |
 | Baseline | M1 merged and accepted | Passed: code `71a3c39`, docs merged at `8a480ea` |
 | First batch | Independent PR checks plus exact combined lint/types/tests/build/install | PRs #11–14 merged; `7a08929` passed 487 tests, 92.8% coverage, lint/types/build/install |
-| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Controls passed on `e4b2a91`, including visible pause; two metadata runs identified a provider-state candidate, pending interpretation and completion acceptance |
+| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Lifecycle gate passed on candidate `2599345`: three supported endings, two titles and verified pause/resume; ad/replacement behavior and remaining limits recorded; pending merge |
 | Runner | One owner, responsive mailbox, durable intent, explicit recovery and cancellation | Subsequent batch |
 | Queue acceptance | Three three-item runs, six correct handoffs, no early or duplicate advancement | Not run |
 | Response bounds | Healthy-LAN stop accepted locally within one second; observed outcome within ten seconds or an explicit timeout | Not measured |
