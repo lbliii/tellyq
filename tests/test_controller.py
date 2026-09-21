@@ -35,7 +35,7 @@ class FakeConnection:
             "app_id": "backdrop" if self.stopped else "youtube",
             "app_session_id": "other" if self.other_session else "session",
         }
-        events = [receiver]
+        events: list[Observation] = [receiver]
         if self.playing and not self.stopped:
             for index in (0, 2):
                 events.append(
