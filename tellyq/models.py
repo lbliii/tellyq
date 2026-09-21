@@ -49,6 +49,11 @@ class Observation(MediaWireDiagnostics, total=False):
     observed_at: str
     monotonic: float
     empty_status: bool | None
+    custom_player_state: int | None
+    custom_player_state_shape: WireFieldShape
+    identity_update: str
+    provider_phase: str | None
+    provider_source: str | None
     media_session_id: int | None
     content_id: str | None
     title: str | None
@@ -76,6 +81,20 @@ class Evidence(TypedDict):
     visual_confirmation: NotRequired[bool | None]
     natural_completion_confirmed: NotRequired[bool]
     reason: NotRequired[str]
+    completion: NotRequired[CompletionRecord]
+
+
+class CompletionRecord(TypedDict):
+    historical: Literal[True]
+    attribution: str
+    source: str
+    sequence: int
+    identity_sequence: int
+    observed_at: str
+
+
+class CompletionFields(TypedDict, total=False):
+    completion: CompletionRecord
 
 
 class ControlDiagnostic(TypedDict):

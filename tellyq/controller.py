@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from .application import ControlRefused, PlaybackApplication, PlaybackResult
 from .clock import SystemClock
+from .completion_report import completion_report
 from .domain.ports import Clock, PlaybackBackend, SessionStore
 from .domain.values import (
     CommandOutcome,
@@ -78,6 +79,11 @@ def _observations(result: PlaybackResult) -> list[Observation]:
             "sequence": event.sequence,
             "connection_generation": event.connection_generation,
             "source": event.source,
+            "identity_update": event.identity_update.value,
+            "provider_phase": event.provider_evidence.phase.value
+            if event.provider_evidence
+            else None,
+            "provider_source": event.provider_evidence.source if event.provider_evidence else None,
         }
         for event in result.observations
     ]
@@ -100,6 +106,7 @@ def _result_report(report: Report, result: PlaybackResult, clock: Clock) -> int:
         ),
         "reason": result.reason.value,
         "visual_confirmation": None,
+        **completion_report(snapshot),
     }
     if snapshot is not None:
         report["attempt_id"] = snapshot.scope.request.attempt_id

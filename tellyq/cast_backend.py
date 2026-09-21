@@ -14,12 +14,14 @@ from .domain.values import (
     CommandAction,
     CommandOutcome,
     CommandReceipt,
+    ContentPhase,
     ContentRef,
     ControlDiagnostic,
     ControlReason,
     ControlResponse,
     ControlStage,
     ErrorCode,
+    IdentityUpdate,
     IdleReason,
     PlaybackCapabilities,
     PlaybackError,
@@ -31,6 +33,7 @@ from .domain.values import (
     Support,
 )
 from .models import Device, Observation
+from .youtube_state import interpret_player_state
 
 if TYPE_CHECKING:
     from .cast import Connection
@@ -329,7 +332,9 @@ class CastBackend:
                 with suppress(Exception, KeyboardInterrupt):
                     self._remember_raw(self.transport.drain_pending())
             raise
-        self._window = 6
+        # Routine status must return before the five-second evidence lifetime.
+        # Explicit start/control/stop keep their separate verification budgets.
+        self._window = 2
         self._remember_raw(raw)
         result: list[PlaybackObservation] = []
         for event in raw:
@@ -451,6 +456,37 @@ class CastBackend:
             "CANCELED": IdleReason.CANCELED,
             "ERROR": IdleReason.ERROR,
         }
+        provider = (
+            interpret_player_state(
+                event,
+                application_id=receiver.get("app_id")
+                if correlated and receiver is not None and media_id is not None
+                else None,
+            )
+            if "custom_player_state_shape" in event
+            else None
+        )
+        ad_active = event.get("ad_break")
+        if provider is not None:
+            if provider.phase == ContentPhase.AD:
+                ad_active = True
+            elif provider.phase != ContentPhase.UNKNOWN:
+                ad_active = False
+            elif ad_active is not True:
+                ad_active = None
+        identity_update = IdentityUpdate.UNKNOWN
+        if content is not None and (
+            (event.get("wire_media") == "valid" and event.get("wire_media_content_id") == "valid")
+            or (
+                event.get("wire_media") == "absent"
+                and event.get("wire_extended_status") == "valid"
+                and event.get("wire_extended_media") == "valid"
+                and event.get("wire_extended_content_id") == "valid"
+            )
+        ):
+            identity_update = IdentityUpdate.EXPLICIT
+        elif event.get("wire_media") == event.get("wire_extended_status") == "absent":
+            identity_update = IdentityUpdate.OMITTED
         observation = replace(
             base,
             session_id=receiver.get("app_session_id")
@@ -462,7 +498,9 @@ class CastBackend:
             state=states.get(event.get("player_state") or "", PlayerState.UNKNOWN),
             position=event.get("position"),
             duration=event.get("duration"),
-            ad_active=event.get("ad_break"),
+            ad_active=ad_active,
+            identity_update=identity_update,
+            provider_evidence=provider,
             pause_supported=event.get("pause_supported"),
             idle_reason=reasons.get(event.get("idle_reason") or ""),
             source="cast_media",

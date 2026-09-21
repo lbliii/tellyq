@@ -18,13 +18,12 @@ from types import TracebackType
 from typing import Literal, TypeGuard
 
 from .cast_backend import video_id
-from .cast_messages import media_observation
+from .cast_messages import custom_player_state, media_observation
 from .models import (
     MetadataStructure,
     MetadataValueType,
     PrivateMetadataField,
     PrivateMetadataSchema,
-    WireFieldShape,
     YouTubeMetadataRecord,
     YouTubeMetadataSample,
 )
@@ -152,21 +151,6 @@ def _containers(data: object) -> dict[ContainerName, object]:
     }
 
 
-def _custom_player_state(status: object) -> tuple[int | None, WireFieldShape]:
-    """Inspect one reviewed provider field as an opaque diagnostic code, never policy."""
-    custom = _field(status, "customData")
-    if not _object(custom):
-        return None, "unavailable"
-    if "playerState" not in custom:
-        return None, "absent"
-    value = custom["playerState"]
-    if value is None:
-        return None, "null"
-    if isinstance(value, int) and not isinstance(value, bool) and -(2**31) <= value < 2**31:
-        return value, "valid"
-    return None, "invalid"
-
-
 def project_metadata(
     data: object,
     *,
@@ -183,7 +167,7 @@ def project_metadata(
     current_session = normalized.get("media_session_id")
     statuses = _field(data, "status")
     containers = _containers(data)
-    custom_player_state, custom_player_state_shape = _custom_player_state(containers["status"])
+    provider_state, provider_shape = custom_player_state(containers["status"])
     sample: YouTubeMetadataSample = {
         "sequence": sequence,
         "observed_at": observed_at,
@@ -203,8 +187,8 @@ def project_metadata(
         if current_session == previous_media_session
         else "changed",
         "player_state": normalized.get("player_state"),
-        "custom_player_state": custom_player_state,
-        "custom_player_state_shape": custom_player_state_shape,
+        "custom_player_state": provider_state,
+        "custom_player_state_shape": provider_shape,
         "idle_reason": normalized.get("idle_reason"),
         "position": normalized.get("position"),
         "duration": normalized.get("duration"),

@@ -89,9 +89,9 @@ def replay(events):
 
 
 def test_continuous_replay_requires_progress_then_explicit_natural_end():
-    first = observation(101)
-    second = observation(102.1)
-    end = observation(103, state=PlayerState.IDLE, idle_reason=IdleReason.FINISHED)
+    first = observation(101, sequence=1)
+    second = observation(102.1, sequence=2)
+    end = observation(103, sequence=3, state=PlayerState.IDLE, idle_reason=IdleReason.FINISHED)
     tracker = replay([first, second, end])
     assert tracker.evidence()["natural_completion_confirmed"] is True
     assert tracker.snapshot.state == PlayerState.ENDED
@@ -124,12 +124,28 @@ def test_long_pause_buffering_and_elapsed_runtime_do_not_finish():
         observation(instant, state=PlayerState.BUFFERING, position=2.1)
         for instant in (130, 132, 134)
     ]
+    # Sequence numbers count callbacks, independently from their monotonic times.
+    events = [replace(event, sequence=index) for index, event in enumerate(events, 1)]
     tracker = replay(events)
     assert tracker.snapshot.state == PlayerState.BUFFERING
     assert tracker.evidence()["natural_completion_confirmed"] is False
-    tracker.observe([observation(136), observation(137.1)], now=137.1)
     tracker.observe(
-        [observation(138, state=PlayerState.IDLE, idle_reason=IdleReason.FINISHED)], now=138
+        [
+            observation(136, sequence=len(events) + 1),
+            observation(137.1, sequence=len(events) + 2),
+        ],
+        now=137.1,
+    )
+    tracker.observe(
+        [
+            observation(
+                138,
+                sequence=len(events) + 3,
+                state=PlayerState.IDLE,
+                idle_reason=IdleReason.FINISHED,
+            )
+        ],
+        now=138,
     )
     assert tracker.evidence()["natural_completion_confirmed"] is True
 
