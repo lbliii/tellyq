@@ -6,6 +6,9 @@ import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from queue import Queue
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -525,7 +528,10 @@ def test_watch_and_short_urls_share_requested_content_pseudonym():
 
 
 @pytest.mark.parametrize("ad,completed", [(False, True), (None, False)])
-def test_exported_normalized_capture_replays_identity_and_completion(tmp_path, ad, completed):
+@pytest.mark.parametrize("partial", [False, True])
+def test_exported_normalized_capture_replays_identity_and_completion(
+    tmp_path, ad, completed, partial
+):
     clock, sink = Clock(), Sink()
     capture_lifecycle(
         ReplayBackend(clock),
@@ -562,6 +568,7 @@ def test_exported_normalized_capture_replays_identity_and_completion(tmp_path, a
 
     windows[0]["observations"] = [receiver(100.1), media(100.5), media(101.7)]
     windows[1]["observations"] = [receiver(102.1), media(103, "IDLE")]
+    windows[1]["partial"] = partial
     source, sanitized, replayed = (
         tmp_path / name for name in ("source.jsonl", "sanitized.jsonl", "replayed.jsonl")
     )
@@ -571,7 +578,10 @@ def test_exported_normalized_capture_replays_identity_and_completion(tmp_path, a
     export_capture(source, sanitized)
     replay_capture(sanitized, replayed)
     output = [json.loads(line) for line in replayed.read_text().splitlines()]
-    assert any(record["evidence"]["natural_completion_confirmed"] for record in output) is completed
+    assert any(record["evidence"]["natural_completion_confirmed"] for record in output) is (
+        completed and not partial
+    )
+    assert [record for record in output if record["kind"] == "window"][-1]["partial"] is partial
     assert output[-1]["attached"] is True
     assert all(record["provenance"] == "synthetic" for record in output)
     assert all(record["entire_run_observed"] is False for record in output)
@@ -596,3 +606,108 @@ def test_rejected_sequence_and_lost_scope_samples_do_not_hide_media_gap():
     gaps = [record for record in sink.records if record["kind"] == "gap"]
     assert [gap["gap_kind"] for gap in gaps] == ["media"]
     assert sink.records[-1]["evidence"]["reason"] == "session_replaced"
+
+
+@pytest.mark.parametrize(
+    "failure,reason",
+    [(KeyboardInterrupt(), "interrupted"), (OSError("SECRET socket path"), "backend_error")],
+)
+def test_actual_connection_interruption_drains_pending_normalized_tail(
+    monkeypatch, failure, reason
+):
+    from pychromecast.controllers.receiver import ReceiverController
+
+    from tellyq.cast import MEDIA, RECEIVER, Connection, Observer
+    from tellyq.cast_backend import _Transport
+
+    clock, sink = Clock(), Sink()
+    connection = Connection.__new__(Connection)
+    connection.events = Queue()
+    connection.receiver_observer = Observer(RECEIVER, connection.events)
+    media_observer = Observer(MEDIA, connection.events)
+    receiver = Mock(spec=ReceiverController)
+
+    def send(request):
+        request["requestId"] = 41
+
+    receiver.send_message.side_effect = send
+    cast = Mock()
+    cast.socket_client.receiver_controller = receiver
+    cast.media_controller.is_active = True
+    connection.cast = cast
+
+    def wait(seconds):
+        clock.tick(seconds)
+        # Actual callback normalization and queue, followed by interruption before
+        # Connection.observe reaches its normal drain() call.
+        media_observer.receive_message(
+            None,
+            {
+                "type": "MEDIA_STATUS",
+                "status": [
+                    {
+                        "mediaSessionId": 1,
+                        "playerState": "IDLE",
+                        "idleReason": "FINISHED",
+                        "media": {"contentId": CONTENT.content_id},
+                    }
+                ],
+            },
+        )
+        raise failure
+
+    monkeypatch.setattr("tellyq.cast.monotonic", clock.monotonic)
+    monkeypatch.setattr("tellyq.cast.Event", lambda: SimpleNamespace(wait=wait))
+    backend = CastBackend(_Transport(connection), TARGET, clock, read_only=True)
+    end = capture_lifecycle(
+        backend,
+        target=TARGET,
+        content=CONTENT,
+        clock=clock,
+        sink=sink,
+        seconds=10,
+        provenance="synthetic",
+    )
+    windows = [record for record in sink.records if record["kind"] == "window"]
+    assert len(windows) == 1 and windows[0]["partial"] is True
+    assert windows[0]["observations"][0]["idle_reason"] == "FINISHED"
+    assert connection.events.empty()
+    assert end["stop_reason"] == reason
+    assert end["attached"] is False
+    assert not end["evidence"]["natural_completion_confirmed"]
+    assert "SECRET" not in json.dumps(sink.records)
+    cast.media_controller.update_status.assert_called_once_with()
+    cast.quit_app.assert_not_called()
+
+
+def test_pending_drain_failure_preserves_original_exception():
+    clock = Clock()
+    failure = KeyboardInterrupt()
+
+    class Faulty(FakeTransport):
+        def observe(self, seconds):
+            raise failure
+
+        def drain_pending(self):
+            raise OSError("secondary failure")
+
+    backend = CastBackend(Faulty(clock), TARGET, clock, read_only=True)
+    with pytest.raises(KeyboardInterrupt) as caught:
+        backend.observe_window(TARGET, 2)
+    assert caught.value is failure
+
+
+def test_sanitizer_preserves_known_launch_failures_without_diagnostics():
+    from tellyq.cast_messages import normalize_message
+
+    normal = normalize_message(
+        {"type": "LAUNCH_ERROR", "reason": "APP_NOT_FOUND", "detailedErrorCode": 4}
+    )
+    assert normal is not None
+    payload = dict(normal)
+    payload["private"] = "SECRET device location"
+    safe = CaptureSanitizer().observation(payload)
+    assert safe == {"kind": "error", "type": "LAUNCH_ERROR", "reason": "APP_NOT_FOUND", "code": 4}
+    normal["reason"] = "SECRET arbitrary details"
+    assert "reason" not in CaptureSanitizer().observation(normal)
+    assert "SECRET" not in json.dumps(CaptureSanitizer().observation(normal))

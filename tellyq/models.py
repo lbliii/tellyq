@@ -140,6 +140,7 @@ class LifecycleRecord(Report):
     entire_run_observed: Literal[False]
     external_control_unobserved: Literal[True]
     attached: NotRequired[bool]
+    partial: NotRequired[bool]
     gap_seconds: NotRequired[float]
     gap_kind: NotRequired[Literal["transport", "media"]]
     stop_reason: NotRequired[Literal["deadline", "interrupted", "backend_error", "cancelled"]]

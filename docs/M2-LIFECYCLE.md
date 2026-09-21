@@ -31,6 +31,9 @@ an earlier run. An interrupted final write may leave a truncated final line; ear
 lines remain readable. A missing `end` record means capture did not finish cleanly.
 A backend failure produces a safe `backend_error` ending without copying exception
 text into the report. Ctrl-C ends the capture; it does not stop TV playback.
+Already queued normalized callbacks are drained after a transport interruption and
+journaled as a `partial: true` window. These diagnostic tails do not update live
+policy evidence, and offline replay also excludes them from completion decisions.
 
 Each window preserves every **normalized adapter field** available at capture time,
 including unknown ads, idle reasons, empty status, connection errors, app transitions

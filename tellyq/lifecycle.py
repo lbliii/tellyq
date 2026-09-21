@@ -252,6 +252,7 @@ def capture_lifecycle(
     tail = backend.drain_raw_observations()
     if tail:
         value = record("window")
+        value["partial"] = True
         value["observations"] = tail
         sink.write(value)
     tracker.observe((), now=clock.monotonic())
@@ -340,7 +341,7 @@ class CaptureSanitizer:
         if "app_name" in raw:
             result["app_name"] = "YouTube" if raw["app_name"] == "YouTube" else None
         for key, values in (
-            ("player_state", {"PLAYING", "PAUSED", "BUFFERING", "IDLE", "UNKNOWN"}),
+            ("player_state", {"PLAYING", "PAUSED", "BUFFERING", "LOADING", "IDLE", "UNKNOWN"}),
             ("idle_reason", {"FINISHED", "CANCELED", "CANCELLED", "INTERRUPTED", "ERROR"}),
             ("source", {"receiver", "receiver_status", "cast_media"}),
             (
@@ -349,11 +350,24 @@ class CaptureSanitizer:
                     "CONNECTION_RESET",
                     "INVALID_RECEIVER_STATUS",
                     "LOAD_FAILED",
+                    "LAUNCH_ERROR",
                     "LOAD_CANCELLED",
                     "INVALID_REQUEST",
                 },
             ),
-            ("reason", {"LOST", "DISCONNECTED", "CONNECTING", "UNCORRELATED_APP_ABSENCE"}),
+            (
+                "reason",
+                {
+                    "LOST",
+                    "DISCONNECTED",
+                    "CONNECTING",
+                    "UNCORRELATED_APP_ABSENCE",
+                    "APP_NOT_FOUND",
+                    "INVALID_STATUS",
+                    "INVALID_APPLICATIONS",
+                    "INVALID_APPLICATION_IDENTITY",
+                },
+            ),
         ):
             value = raw.get(key)
             if isinstance(value, str) and value in values:
@@ -439,6 +453,9 @@ class CaptureSanitizer:
         attached = raw.get("attached")
         if type(attached) is bool:
             record["attached"] = attached
+        partial = raw.get("partial")
+        if type(partial) is bool:
+            record["partial"] = partial
         state = raw.get("state")
         if isinstance(state, str) and state in {
             "unknown",
@@ -579,7 +596,9 @@ def replay_capture(source: Path, destination: Path) -> None:
             if record["monotonic"] < clock.monotonic():
                 raise ValueError("Replay record times must not move backwards.")
             clock.record = record
-            transport.batch = record.get("observations", [])
+            # Interrupted windows are diagnostic only, even if their queued tail
+            # contains a terminal status. Replaying must preserve that boundary.
+            transport.batch = [] if record.get("partial") else record.get("observations", [])
             events = backend.observe_window(tracker.request.target, 2)
             backend.drain_raw_observations()
             tracker.observe(events, now=clock.monotonic())

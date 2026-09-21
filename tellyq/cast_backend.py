@@ -1,10 +1,10 @@
 """Cast adapter: wire parsing, callback correlation and bounded device effects."""
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from math import isfinite
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -52,6 +52,13 @@ class CastTransport(Protocol):
     def observe(self, seconds: float) -> list[Observation]: ...
     def play(self, content_id: str) -> None: ...
     def quit(self) -> None: ...
+
+
+@runtime_checkable
+class PendingObservationTransport(Protocol):
+    """Optional nonblocking access to already normalized callbacks after interrupted I/O."""
+
+    def drain_pending(self) -> list[Observation]: ...
 
 
 class CastBackend:
@@ -168,12 +175,16 @@ class CastBackend:
 
     def observe(self, target: PlaybackTarget) -> tuple[PlaybackObservation, ...]:
         self._target(target)
-        raw = self.transport.observe(self._window)
+        try:
+            raw = self.transport.observe(self._window)
+        except Exception, KeyboardInterrupt:
+            if isinstance(self.transport, PendingObservationTransport):
+                # Preserve the original failure if even the local drain fails.
+                with suppress(Exception, KeyboardInterrupt):
+                    self._remember_raw(self.transport.drain_pending())
+            raise
         self._window = 6
-        if self.read_only:
-            self.raw_observations = [event.copy() for event in raw]
-        else:
-            self.raw_observations.extend(event.copy() for event in raw)
+        self._remember_raw(raw)
         result: list[PlaybackObservation] = []
         for event in raw:
             instant = event.get("monotonic")
@@ -211,6 +222,12 @@ class CastBackend:
                 if not self.read_only:
                     self._identity_history.append(observation)
         return tuple(result)
+
+    def _remember_raw(self, raw: list[Observation]) -> None:
+        if self.read_only:
+            self.raw_observations = [event.copy() for event in raw]
+        else:
+            self.raw_observations.extend(event.copy() for event in raw)
 
     def observe_window(
         self, target: PlaybackTarget, seconds: float
@@ -316,6 +333,9 @@ class _Transport:
 
     def observe(self, seconds: float) -> list[Observation]:
         return self.connection.observe(seconds)
+
+    def drain_pending(self) -> list[Observation]:
+        return self.connection.drain()
 
     def play(self, content_id: str) -> None:
         self.connection.youtube.play_video(content_id)
