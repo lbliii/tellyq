@@ -50,9 +50,11 @@ completion reporting and a repeatable single-video checkpoint runner. Reviewed
 candidate `2599345` passed 666 offline tests and three live natural endings across
 two titles, including verified and visible pause/resume. It also retained completion
 through a later ad state and content replacement while refusing unsafe cleanup.
-These changes await merge. The [M2a checkpoint](docs/M2A-CHECKPOINT.md) preserves
-every attempt, the exact candidate and remaining limits. Automatic queue advancement
-remains unimplemented.
+PRs #20–22 are merged at `6aec896`; the merged tree matches the tested candidate
+and passes 666 tests. The [M2a checkpoint](docs/M2A-CHECKPOINT.md) preserves every
+attempt and remaining limits. The [M2b plan](docs/M2B-PLAN.md) starts the persistent
+owner, queue policy and durable execution work. Automatic advancement remains
+unimplemented.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
 

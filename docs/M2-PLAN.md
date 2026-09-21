@@ -150,13 +150,17 @@ then three natural endings across two titles with one verified pause/resume.
 The user confirmed the pause and resume. A later ad-specific code and replacement
 were captured; the original completion survived and cleanup refused replacement.
 See the ledger for the nonzero cleanup outcome, visual evidence and untested cases.
-Implementation can proceed to M2b after merge and merged-tree verification.
+PRs #20–22 merged at `6aec896`. The merged tree matches reviewed integration
+`a82cb17` and passed 666 fresh offline tests. M2b is now underway under the
+[independent work-stream plan](M2B-PLAN.md).
 
 ## M2b: one persistent playback owner
 
 The storage foundation can proceed in parallel with M2a because it executes no
 device effects. Automatic advancement starts only after the M2a evidence review.
-The following work is a subsequent batch, not functionality delivered by S1.
+The [M2b plan](M2B-PLAN.md) separates the first independent component PRs from
+their subsequent CLI/IPC composition and hardware acceptance. The following work
+is not functionality delivered by S1.
 
 1. **R1 — Foreground runner and mailbox.** Add `tellyq serve` with one owner per
    receiver, a private local IPC endpoint and immutable status snapshots. A
@@ -211,8 +215,8 @@ handoff or stop-latency acceptance run occurred in this batch.
 | --- | --- | --- |
 | Baseline | M1 merged and accepted | Passed: code `71a3c39`, docs merged at `8a480ea` |
 | First batch | Independent PR checks plus exact combined lint/types/tests/build/install | PRs #11–14 merged; `7a08929` passed 487 tests, 92.8% coverage, lint/types/build/install |
-| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Lifecycle gate passed on candidate `2599345`: three supported endings, two titles and verified pause/resume; ad/replacement behavior and remaining limits recorded; pending merge |
-| Runner | One owner, responsive mailbox, durable intent, explicit recovery and cancellation | Subsequent batch |
+| M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Lifecycle gate passed on candidate `2599345`: three supported endings, two titles and verified pause/resume; ad/replacement behavior and remaining limits recorded; merged and checked at `6aec896` |
+| Runner | One owner, responsive mailbox, durable intent, explicit recovery and cancellation | First component swarm underway; composition and hardware gate follow in [M2b](M2B-PLAN.md) |
 | Queue acceptance | Three three-item runs, six correct handoffs, no early or duplicate advancement | Not run |
 | Response bounds | Healthy-LAN stop accepted locally within one second; observed outcome within ten seconds or an explicit timeout | Not measured |
 | Recovery | Restart scenarios reconcile uncertainty without a duplicate launch or false completion | Not run against the runner |
