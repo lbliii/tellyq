@@ -10,7 +10,9 @@ start/status/pause/resume/stop, durable history and bounded reconnect recovery.
 Three of four recent three-item attempts completed. The intermittent enqueue
 stall remains open as [issue #42](https://github.com/lbliii/tellyq/issues/42).
 See the [M2 closeout](docs/M2-ACCEPTANCE.md) for the complete evidence and limits.
-M3's Milo/MCP interface is next; it has not yet been implemented.
+M3's Milo/MCP foundation is implemented as a local stdio surface with
+`start`, `status`, and `stop`; the full M3 CLI parity and live acceptance gate
+remain open.
 
 ## First playback proof (M0)
 
@@ -109,18 +111,23 @@ uv run --locked tellyq stop
 ```
 
 The optional M3 stdio MCP surface uses the same already-running foreground
-owner. Start the owner separately, then configure its absolute private runtime
-when launching Milo; the MCP caller cannot supply a runtime path or create a
-second playback owner:
+owner. Run the owner in one terminal and launch Milo in a second terminal with
+the owner's absolute private runtime; the MCP caller cannot supply a runtime
+path or create a second playback owner:
 
 ```sh
+# Terminal 1, from the TellyQ checkout.
 mkdir -p runtime/mcp-owner
-cp examples/session.json runtime/mcp-session.json
+cp examples/native-session.json runtime/mcp-session.json
 # Edit runtime/mcp-session.json with a fresh queue_id and discovered device UUID.
 uv run --locked tellyq --runtime "$PWD/runtime/mcp-owner" serve \
   --manifest "$PWD/runtime/mcp-session.json"
-TELLYQ_OWNER_RUNTIME="$PWD/runtime/mcp-owner" \
-  uv run --locked --extra mcp tellyq-mcp --mcp
+```
+
+```sh
+# Terminal 2, from any working directory; use the absolute checkout path.
+TELLYQ_OWNER_RUNTIME="/absolute/path/to/tellyq/runtime/mcp-owner" \
+  uv --directory "/absolute/path/to/tellyq" run --locked --extra mcp tellyq-mcp --mcp
 ```
 
 MCP exposes only `start`, `status`, and `stop`. An accepted `start` ticket is

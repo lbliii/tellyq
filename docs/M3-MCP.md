@@ -12,13 +12,18 @@ startup. Replace the receiver UUID with the value from `discover` and choose a
 new queue ID; the example uses the already-tested three-item service shape.
 
 ```sh
+# Terminal 1, from the TellyQ checkout.
 mkdir -p runtime/mcp-owner
-cp examples/session.json runtime/mcp-session.json
+cp examples/native-session.json runtime/mcp-session.json
 # Edit runtime/mcp-session.json: set queue_id and target.device_id.
 uv run --locked tellyq --runtime "$PWD/runtime/mcp-owner" serve \
   --manifest "$PWD/runtime/mcp-session.json"
-TELLYQ_OWNER_RUNTIME="$PWD/runtime/mcp-owner" \
-  uv run --locked --extra mcp tellyq-mcp --mcp
+```
+
+```sh
+# Terminal 2, from any working directory; use the absolute checkout path.
+TELLYQ_OWNER_RUNTIME="/absolute/path/to/tellyq/runtime/mcp-owner" \
+  uv --directory "/absolute/path/to/tellyq" run --locked --extra mcp tellyq-mcp --mcp
 ```
 
 A generic MCP client configuration is equivalent to:
@@ -28,7 +33,10 @@ A generic MCP client configuration is equivalent to:
   "mcpServers": {
     "tellyq": {
       "command": "uv",
-      "args": ["run", "--locked", "--extra", "mcp", "tellyq-mcp", "--mcp"],
+      "args": [
+        "--directory", "/absolute/path/to/tellyq", "run", "--locked",
+        "--extra", "mcp", "tellyq-mcp", "--mcp"
+      ],
       "env": {"TELLYQ_OWNER_RUNTIME": "/absolute/path/to/runtime/mcp-owner"}
     }
   }
@@ -47,6 +55,11 @@ ticket is an acknowledgement of command handling, not proof that the receiver
 is playing. `status` returns the owner's timestamped snapshot and evidence;
 inspect its state and evidence fields before claiming playback. `stop` submits
 the owner's existing guarded stop and retains its uncertain-outcome behavior.
+
+The advertised MCP output schema is intentionally a generic JSON object at the
+Milo boundary. Milo 0.4.3 cannot faithfully render TellyQ's recursive IPC
+aliases and nullable nested evidence into JSON Schema; the actual structured
+payload remains the versioned typed contract in `tellyq/models.py`.
 
 The repository now has offline subprocess coverage for the real initialize,
 tools/list, tools/call, invalid-argument and unknown-tool protocol paths, plus

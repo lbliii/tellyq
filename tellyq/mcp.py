@@ -11,7 +11,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .models import MCPResult
 from .runner_ipc import IPCUnavailable
@@ -43,7 +43,11 @@ def _validate_command_id(command_id: str | None) -> str | None:
 
 def _safe_error(exc: Exception) -> MCPResult:
     if isinstance(exc, IPCUnavailable):
-        error_type, message = "owner_unavailable", "The configured foreground owner is unavailable."
+        error_type = "owner_unavailable"
+        message = (
+            "The owner request could not be confirmed; its outcome may be unknown. "
+            "Check status before retrying."
+        )
     elif isinstance(exc, ValueError):
         error_type, message = "owner_rejected", "The foreground owner rejected the command."
     else:
@@ -71,8 +75,6 @@ def _call(command: str, runtime: Path, *, command_id: str | None = None) -> MCPR
         }
     try:
         response = owner_command(command, runtime, command_id=validated_id)
-    except (IPCUnavailable, ValueError, OSError) as exc:
-        return _safe_error(exc)
     except Exception as exc:
         return _safe_error(exc)
     if not response["ok"]:
@@ -107,7 +109,10 @@ def build_cli(runtime: Path) -> CLI:
 
     @cli.command(
         "start",
-        description="Start the owner's first queued item and return its request ticket.",
+        description=(
+            "Submit start to the owner and return its request ticket; acceptance is not "
+            "verified playback."
+        ),
         annotations={
             "readOnlyHint": False,
             "destructiveHint": True,
@@ -115,13 +120,13 @@ def build_cli(runtime: Path) -> CLI:
             "openWorldHint": True,
         },
     )
-    def start(command_id: str | None = None) -> MCPResult:
-        """Start the first queued item through the existing foreground owner.
+    def start(command_id: str | None = None) -> dict:
+        """Submit start through the owner; acceptance is not verified playback.
 
         Args:
             command_id: Optional stable ID used to retry or query this request.
         """
-        return _call("start", runtime, command_id=command_id)
+        return cast(dict, _call("start", runtime, command_id=command_id))
 
     @cli.command(
         "status",
@@ -133,13 +138,15 @@ def build_cli(runtime: Path) -> CLI:
             "openWorldHint": True,
         },
     )
-    def status() -> MCPResult:
+    def status() -> dict:
         """Read current owner state without changing playback."""
-        return _call("status", runtime)
+        return cast(dict, _call("status", runtime))
 
     @cli.command(
         "stop",
-        description="Request a guarded stop through the existing foreground owner.",
+        description=(
+            "Submit a guarded stop to the owner; acceptance is not verified receiver stop."
+        ),
         annotations={
             "readOnlyHint": False,
             "destructiveHint": True,
@@ -147,13 +154,13 @@ def build_cli(runtime: Path) -> CLI:
             "openWorldHint": True,
         },
     )
-    def stop(command_id: str | None = None) -> MCPResult:
-        """Stop only the session currently owned by the foreground owner.
+    def stop(command_id: str | None = None) -> dict:
+        """Submit a guarded stop; acceptance is not verified receiver stop.
 
         Args:
             command_id: Optional stable ID used to retry or query this request.
         """
-        return _call("stop", runtime, command_id=command_id)
+        return cast(dict, _call("stop", runtime, command_id=command_id))
 
     return cli
 

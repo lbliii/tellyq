@@ -68,7 +68,9 @@ def main() -> None:
         environment = work / "venv"
         python = environment / "bin" / "python"
         cli = environment / "bin" / "tellyq"
+        mcp_cli = environment / "bin" / "tellyq-mcp"
         requirements = work / "requirements.txt"
+        mcp_requirements = work / "requirements-mcp.txt"
         run("uv", "export", "--locked", "--no-dev", "--no-emit-project", "-o", str(requirements))
         run("uv", "venv", "--python", sys.executable, str(environment))
         run(
@@ -127,7 +129,60 @@ assert tellyq.state.RUNTIME == Path.cwd() / "runtime"
             )
         if not (work / "runtime" / "queue.json").is_file():
             raise RuntimeError("Installed CLI did not save state under the working directory.")
-    print("Wheel/sdist contents, isolated imports, CLI help and local queue passed.")
+
+        # The base wheel remains usable without Milo; install only the optional
+        # extra before exercising the separately packaged stdio entry point.
+        run(
+            "uv",
+            "export",
+            "--locked",
+            "--no-dev",
+            "--extra",
+            "mcp",
+            "--no-emit-project",
+            "-o",
+            str(mcp_requirements),
+        )
+        run(
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            "--require-hashes",
+            "--no-deps",
+            "-r",
+            str(mcp_requirements),
+        )
+        if not mcp_cli.is_file():
+            raise RuntimeError("The optional wheel install did not provide tellyq-mcp.")
+        mcp_environment = os.environ.copy()
+        mcp_environment["TELLYQ_OWNER_RUNTIME"] = str(work / "missing-owner")
+        handshake = subprocess.run(
+            [str(mcp_cli), "--mcp"],
+            cwd=work,
+            env=mcp_environment,
+            input=(
+                '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
+                '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n'
+            ),
+            capture_output=True,
+            check=True,
+            text=True,
+            timeout=30,
+        )
+        responses = [json.loads(line) for line in handshake.stdout.splitlines() if line]
+        if len(responses) != 2 or any(response.get("jsonrpc") != "2.0" for response in responses):
+            raise RuntimeError("Installed tellyq-mcp emitted an invalid stdio handshake.")
+        if {tool["name"] for tool in responses[1]["result"]["tools"]} != {
+            "start",
+            "status",
+            "stop",
+        }:
+            raise RuntimeError("Installed tellyq-mcp exposed an unexpected tool set.")
+    print(
+        "Wheel/sdist contents, isolated imports, CLI help/local queue and optional tellyq-mcp handshake passed."
+    )
 
 
 if __name__ == "__main__":

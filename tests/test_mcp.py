@@ -8,11 +8,16 @@ import socket
 import subprocess
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
+
+import tellyq.mcp as mcp
+from tellyq.runner_ipc import IPCUnavailable
 
 pytest.importorskip("milo")
 
@@ -335,9 +340,29 @@ def test_mcp_exit_leaves_owner_endpoint_and_no_owner_is_machine_readable(
                 "params": {"name": "status", "arguments": {}},
             },
         )
-        structured = result["result"]["structuredContent"]
-        assert structured["ok"] is False
-        assert structured["code"] == "owner_unavailable"
+        status = result["result"]["structuredContent"]
+        start = _request(
+            process,
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {"name": "start", "arguments": {"command_id": "no-owner-start"}},
+            },
+        )["result"]["structuredContent"]
+        stop = _request(
+            process,
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {"name": "stop", "arguments": {"command_id": "no-owner-stop"}},
+            },
+        )["result"]["structuredContent"]
+        for response in (status, start, stop):
+            assert response["ok"] is False
+            assert response["code"] == "owner_unavailable"
+            assert "unknown" in response["error"]["message"]
     finally:
         assert process.stdin is not None
         process.stdin.close()
@@ -346,3 +371,61 @@ def test_mcp_exit_leaves_owner_endpoint_and_no_owner_is_machine_readable(
         process.stdout.close()
         process.stderr.close()
         directory.cleanup()
+
+
+def test_invalid_command_ids_are_bounded_before_owner_dispatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner = Mock(side_effect=AssertionError("owner must not be called"))
+    monkeypatch.setattr(mcp, "owner_command", owner)
+    for command_id in ("bad id", "a" * 129):
+        result = mcp._call("start", tmp_path, command_id=command_id)
+        assert result["code"] == "invalid_command_id"
+    owner.assert_not_called()
+
+
+def test_owner_exception_material_is_redacted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    secret = "/private/owner/runtime/session.sock bearer-token"
+    for exception in (IPCUnavailable(secret), ValueError(secret)):
+        owner = Mock(side_effect=exception)
+        monkeypatch.setattr(mcp, "owner_command", owner)
+        result = mcp._call("status", tmp_path)
+        assert secret not in json.dumps(result)
+        assert result["ok"] is False
+
+
+def test_startup_runtime_requires_absolute_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TELLYQ_OWNER_RUNTIME", raising=False)
+    with pytest.raises(RuntimeError, match="must name"):
+        mcp.configured_runtime()
+    monkeypatch.setenv("TELLYQ_OWNER_RUNTIME", "relative/runtime")
+    with pytest.raises(RuntimeError, match="absolute"):
+        mcp.configured_runtime()
+
+
+def test_mcp_exposes_exact_tool_schemas(tmp_path: Path) -> None:
+    from milo.mcp import _list_tools
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        listed = _list_tools(mcp.build_cli(tmp_path), include_ui=False)
+    assert not caught
+    tools = {tool["name"]: tool for tool in listed}
+    assert set(tools) == {"start", "status", "stop"}
+    command_id = {
+        "type": "string",
+        "description": "Optional stable ID used to retry or query this request.",
+        "default": None,
+    }
+    assert tools["start"]["inputSchema"] == {
+        "type": "object",
+        "properties": {"command_id": command_id},
+    }
+    assert tools["stop"]["inputSchema"] == {
+        "type": "object",
+        "properties": {"command_id": command_id},
+    }
+    assert tools["status"]["inputSchema"] == {"type": "object", "properties": {}}
+    assert all(tool["outputSchema"] == {"type": "object"} for tool in tools.values())
