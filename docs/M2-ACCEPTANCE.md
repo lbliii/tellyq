@@ -15,10 +15,14 @@ different facts.
 
 ## Offline process-loss coverage
 
-The independent recovery/acceptance branch passes locked Python 3.14 preflight:
+The recovery production head `293e9fe` passed locked Python 3.14 preflight with
 994 tests, Ruff, formatting, ty, source/wheel builds and isolated installation.
-The added three-item synthetic checkpoint observes two handoffs through the actual
-service client; it is still synthetic evidence.
+CI then exposed a scheduling race in the synthetic checkpoint fixture. Test-only
+fix `4e48a9b` synchronizes each ending with client-observed verified playback and
+adds slower polling coverage: 20 repeated covered runs and all 995 independent
+tests pass, along with macOS/Linux CI. The final local combined candidate passes
+1,090 tests and packaging checks. The full [validation history](M2B-PLAN.md#ci-scheduling-regression-and-final-validation)
+retains the earlier CI failures. The three-item checkpoint remains synthetic evidence.
 
 The ordinary test suite launches isolated synthetic service processes. Each child
 allows only AF_UNIX sockets and denies DNS; pytest's global socket/DNS prohibition

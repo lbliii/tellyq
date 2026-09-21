@@ -278,18 +278,18 @@ limits. M3 CLI/MCP work begins after this gate, not as a substitute for it.
 ## Closing-stream validation
 
 The independently tested heads were combined without conflicts in an isolated
-checkout. Exact code candidate `98ec6702daf48f3d6db69c8a0ee45436ccc8df66`, tree
-`e9d120b979207f717dbcb9f6dd58a132f4bafd9e`, passes locked Python 3.14 `poe ci`:
+checkout. Initial local code candidate `98ec6702daf48f3d6db69c8a0ee45436ccc8df66`, tree
+`e9d120b979207f717dbcb9f6dd58a132f4bafd9e`, passed locked Python 3.14 `poe ci`:
 1,089 tests, 90.7% branch-inclusive coverage, Ruff, formatting, ty, source/wheel
 builds and isolated installation.
 
-| Independent PR | Tested code head |
+| Independent PR | Initially tested code head |
 | --- | --- |
 | [Stop responsiveness #30](https://github.com/lbliii/tellyq/pull/30) | `7e8d8014bdad95feaebf41098204b232c8d34e10` |
 | [Handoff diagnostics #31](https://github.com/lbliii/tellyq/pull/31) | `db3322484cbce791e666b86c2d41dc35feacc30b` |
 | [Recovery and acceptance #32](https://github.com/lbliii/tellyq/pull/32) | `293e9fe0fe0f20de14f1988c578de2df22c72544` |
 
-The recovery branch independently passes 994 tests and preflight. Its private
+Recovery production head `293e9fe` independently passed 994 tests and preflight. Its private
 service checkpoint correlates command timing to the canonical ticket and attempt;
 failed/canceled tickets and another client's same-action receipt cannot supply
 verification. Five actual process-loss scenarios preserve uncertain work without
@@ -300,3 +300,32 @@ PRs #30 and #31 also passed their Python 3.14 macOS/Linux GitHub workflows.
 This record is a documentation-only follow-up to the exact tested code heads.
 No hardware ran for these closing streams. The live three-session gate above and
 the previous measured stop-target miss remain open; test success does not accept M2.
+
+
+### CI scheduling regression and final validation
+
+The initial local pass above preceded a CI scheduling failure in the new synthetic
+checkpoint scenario: [macOS at `293e9fe`](https://github.com/lbliii/tellyq/actions/runs/35646720084)
+missed a short-lived verified playback sample, while Linux passed. The subsequent
+[documentation head `f74928d`](https://github.com/lbliii/tellyq/actions/runs/35646724230)
+failed the same assertion on Linux while macOS passed. These failures are retained;
+the earlier local pass did not establish a deterministic fixture.
+
+Test-only fix `4e48a9b93ae53d80e17209a4c44001fe2d5a8f71` gates each synthetic
+ending on an Event signaled after the real IPC checkpoint client receives that
+item's verified PLAYING snapshot. Cached status stays readable while the owner
+waits. The assertions and production evidence rules are unchanged. The scenario
+passes 20 repeated covered runs across 50 ms and 300 ms polling, and the independent
+branch passes locked `poe check` with 995 tests, Ruff, formatting and ty.
+Both [branch CI](https://github.com/lbliii/tellyq/actions/runs/35647094581) and
+[PR CI](https://github.com/lbliii/tellyq/actions/runs/35647099555) pass their
+Python 3.14 macOS/Linux jobs on this exact fixed head.
+
+The final local validation candidate `b0726f861e8605bd0fe53978516b3eea58f0704c`,
+tree `72ee2fb62dd7dcb1272342e03f094247981715ff`, combines the same PR #30 and #31
+heads above with PR #32 at `4e48a9b93ae53d80e17209a4c44001fe2d5a8f71`.
+Its locked `poe ci` passes **1,090 tests**, 90.7% branch-inclusive coverage, Ruff,
+formatting, ty, source/wheel builds and isolated installation. This is an isolated
+local validation candidate, not a fourth PR; the three public PRs remain independent.
+This final record changes documentation only. No new live acceptance evidence was
+created, and the three-session hardware gate remains pending.
