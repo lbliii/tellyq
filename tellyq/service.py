@@ -164,6 +164,7 @@ def run_foreground(
     runner = make_runner(runtime, spec, backend_factory=backend_factory)
     server: RunnerIPCServer | None = None
     terminal = {RunnerPhase.STOPPED, RunnerPhase.FAILED}
+    startup_failed = False
     try:
         try:
             runner.start()
@@ -175,7 +176,11 @@ def run_foreground(
                     "snapshot": wire_snapshot(runner.snapshot()),
                 }
             )
-        while runner.snapshot().phase not in terminal:
+        except RunnerUnavailable:
+            # Failure readiness can precede owner resource/lock cleanup. Join
+            # below before inspecting/reporting the final failure category.
+            startup_failed = True
+        while not startup_failed and runner.snapshot().phase not in terminal:
             current = runner.snapshot()
             if (
                 server is None
@@ -195,9 +200,6 @@ def run_foreground(
                 break
     except KeyboardInterrupt:
         pass
-    except RunnerUnavailable:
-        if runner.snapshot().phase != RunnerPhase.FAILED:
-            raise
     finally:
         reported = False
         reporting_error: Exception | None = None

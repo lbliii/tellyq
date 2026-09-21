@@ -14,7 +14,14 @@ from tellyq import service
 from tellyq.domain.queue import QueueIntent
 from tellyq.domain.values import PlaybackCapabilities, PlaybackTarget
 from tellyq.queue_store import SQLiteQueueStore
-from tellyq.runner import RunnerPhase, RunnerSnapshot, RunnerTimeout, RunnerUnavailable, TaskView
+from tellyq.runner import (
+    RunnerFailure,
+    RunnerPhase,
+    RunnerSnapshot,
+    RunnerTimeout,
+    RunnerUnavailable,
+    TaskView,
+)
 from tellyq.state import make_queue, save
 
 
@@ -159,6 +166,35 @@ def test_startup_failure_reports_cached_category_after_cleanup(tmp_path):
     assert events[-1]["snapshot"]["failure"] == "task_initialization_failed"
     assert events[-1]["snapshot"]["owns_device"] is False
     assert "private receiver" not in json.dumps(events)
+
+
+def test_startup_failure_can_signal_before_owner_has_finished_cleanup(tmp_path, monkeypatch):
+    spec = load(tmp_path, manifest())
+    events = []
+
+    class Runner:
+        joined = False
+
+        def start(self):
+            raise RunnerUnavailable("initialization failed, cleanup still in progress")
+
+        def shutdown(self, timeout):
+            self.joined = True
+            return self.snapshot()
+
+        def snapshot(self):
+            return RunnerSnapshot(
+                phase=RunnerPhase.FAILED if self.joined else RunnerPhase.STOPPING,
+                owns_device=not self.joined,
+                failure=RunnerFailure.INITIALIZATION,
+            )
+
+    runner = Runner()
+    monkeypatch.setattr(service, "make_runner", lambda *args, **kwargs: runner)
+    assert service.run_foreground(tmp_path, spec, events.append) == 1
+    assert runner.joined
+    assert events[-1]["snapshot"]["phase"] == "failed"
+    assert events[-1]["snapshot"]["owns_device"] is False
 
 
 def test_cli_ipc_playback_queue_end_to_end():
