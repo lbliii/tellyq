@@ -33,6 +33,9 @@ stay in the denominator and in the run record. M7 is not a prerequisite for M8.
 
 ## M1 — Make the successful experiment a maintainable core
 
+The [M1 execution plan](M1-PLAN.md) breaks this milestone into independent agent
+workstreams, file ownership, PRs targeting `main`, and a later integration gate.
+
 Deliver frozen typed models for content, targets, attempts, acknowledgements,
 observations, capabilities and errors. Move YouTube ID parsing and Cast app/session
 handling into the adapter. Inject the clock and state store. Keep Bob Ross as an
