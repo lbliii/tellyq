@@ -23,6 +23,7 @@ from .domain.values import (
     SessionSnapshot,
     Support,
 )
+from .handoff import ReleaseAuthority, may_release, track_release
 
 
 class ControlRefused(ValueError):
@@ -264,6 +265,50 @@ class PlaybackApplication:
 
     def pause(self, request: PlaybackRequest, owned: SessionSnapshot | None) -> PlaybackResult:
         return self._control(request, owned, CommandAction.PAUSE)
+
+    def release(
+        self,
+        request: PlaybackRequest,
+        owned: SessionSnapshot,
+        authority: ReleaseAuthority,
+    ) -> PlaybackResult:
+        """Close a proven completed owned session without manufacturing operator stop."""
+        self.last_result = None
+        try:
+            revision = self._revision(owned)
+            boundary = self.clock.monotonic()
+            baseline = self.backend.observe(request.target)
+            updated = track_release(owned, baseline, authority)
+            snapshot = self._reconcile(request, owned, boundary, baseline)
+            if not may_release(snapshot, updated, baseline, now=self.clock.monotonic()):
+                raise ControlRefused(ControlReason.OWNERSHIP_UNVERIFIED)
+            snapshot = replace(
+                snapshot, release_boundary=self.clock.monotonic(), release_confirmed=False
+            )
+            snapshot = self._persist(snapshot, revision)
+            revision = snapshot.revision
+            receipt = self._dispatch(
+                request,
+                CommandAction.RELEASE,
+                baseline,
+                lambda: replace(self.backend.stop(snapshot.scope), action=CommandAction.RELEASE),
+            )
+            events = self.backend.observe(request.target)
+            snapshot = self._apply(policy.record_receipt(snapshot, receipt), events)
+            following = track_release(snapshot, events, updated)
+            if following is None or following.blocked:
+                snapshot = replace(snapshot, release_confirmed=False, release_boundary=None)
+            self.last_result = PlaybackResult(
+                baseline + events,
+                snapshot,
+                receipt,
+                snapshot.evidence.reason,
+                control_observed=snapshot.release_confirmed,
+            )
+            self.store.save(snapshot, expected_revision=revision)
+            return self.last_result
+        except Exception, KeyboardInterrupt:
+            return self._failed(request)
 
     def resume(self, request: PlaybackRequest, owned: SessionSnapshot | None) -> PlaybackResult:
         return self._control(request, owned, CommandAction.RESUME)

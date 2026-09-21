@@ -138,6 +138,7 @@ class CommandAction(StrEnum):
     STOP = "stop"
     PAUSE = "pause"
     RESUME = "resume"
+    RELEASE = "release"
 
 
 class CommandOutcome(StrEnum):
@@ -376,6 +377,8 @@ class SessionSnapshot:
     last_sequence: int = -1
     last_monotonic: float | None = None
     ownership_lost: bool = False
+    release_boundary: float | None = None
+    release_confirmed: bool = False
     display: DisplayEvidence | None = None
 
 

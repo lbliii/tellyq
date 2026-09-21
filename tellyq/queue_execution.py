@@ -28,11 +28,8 @@ class QueueCommandRequest:
         for identity in (self.queue_id, self.item_id, self.attempt_id, self.command_id):
             if not isinstance(identity, str) or not identity.strip():
                 raise ValueError("queue command identities must be nonempty strings")
-        if not isinstance(self.action, CommandAction) or self.action not in {
-            CommandAction.START,
-            CommandAction.STOP,
-        }:
-            raise ValueError("durable execution currently supports start and stop")
+        if not isinstance(self.action, CommandAction):
+            raise ValueError("durable execution requires a supported command action")
         for counter in (self.expected_revision, self.expected_generation):
             if type(counter) is not int or counter < 0:
                 raise ValueError("queue command fences must be nonnegative integers")
@@ -149,7 +146,7 @@ class QueueExecutor:
                 at=self.clock.utcnow(),
                 expected_revision=request.expected_revision,
             )
-        else:
+        elif request.action == CommandAction.STOP:
             if not any(
                 attempt.attempt_id == request.attempt_id and attempt.item_id == request.item_id
                 for attempt in before.attempts
@@ -159,6 +156,20 @@ class QueueExecutor:
                 request.queue_id,
                 attempt_id=request.attempt_id,
                 command_id=request.command_id,
+                at=self.clock.utcnow(),
+                expected_revision=request.expected_revision,
+            )
+        else:
+            if not any(
+                a.attempt_id == request.attempt_id and a.item_id == request.item_id
+                for a in before.attempts
+            ):
+                raise ValueError("control requires the selected attempt's item")
+            prepared = self.store.prepare_control(
+                request.queue_id,
+                attempt_id=request.attempt_id,
+                command_id=request.command_id,
+                action=request.action,
                 at=self.clock.utcnow(),
                 expected_revision=request.expected_revision,
             )
@@ -180,13 +191,13 @@ class QueueExecutor:
         current = self._load(request.queue_id)
         _generation(current, request.expected_generation)
         if current.revision != dispatched.revision or (
-            request.action == CommandAction.START and current.cancellation_requested
+            request.action != CommandAction.STOP and current.cancellation_requested
         ):
             raise RevisionConflict("queue changed before device invocation")
         command = _matching(dispatched, request)
         assert command is not None
         dispatch = QueueDispatch(dispatched, command)
-        if request.action == CommandAction.START and may_start is not None:
+        if request.action != CommandAction.STOP and may_start is not None:
             try:
                 allowed = may_start()
             except Exception:

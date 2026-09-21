@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from .values import (
     CommandAction,
+    CommandOutcome,
     CommandReceipt,
     CompletionAttribution,
     CompletionEvidence,
@@ -91,6 +92,8 @@ def invalidate_history(snapshot: SessionSnapshot) -> SessionSnapshot:
         progress_anchor=None,
         completion_anchor=None,
         has_confirmed_playback=False,
+        release_boundary=None,
+        release_confirmed=False,
         state=PlayerState.ENDED if snapshot.completion is not None else PlayerState.UNKNOWN,
         evidence=PlaybackEvidence(
             natural_completion_confirmed=snapshot.completion is not None,
@@ -109,6 +112,8 @@ def _lost(snapshot: SessionSnapshot, observation: PlaybackObservation) -> Sessio
         completion_anchor=None,
         has_confirmed_playback=False,
         ownership_lost=True,
+        release_boundary=None,
+        release_confirmed=False,
         evidence=PlaybackEvidence(
             natural_completion_confirmed=snapshot.completion is not None,
             reason=EvidenceReason.SESSION_REPLACED,
@@ -232,14 +237,43 @@ def observe(
         return snapshot
     if snapshot.last_sequence >= 0 and observation.sequence > snapshot.last_sequence + 1:
         snapshot = replace(
-            snapshot, progress_anchor=None, completion_anchor=None, has_confirmed_playback=False
+            snapshot,
+            progress_anchor=None,
+            completion_anchor=None,
+            has_confirmed_playback=False,
+            release_boundary=None,
+            release_confirmed=False,
         )
     snapshot = replace(
         snapshot, last_sequence=observation.sequence, last_monotonic=observation.monotonic
     )
     if observation.connection_reset:
         return _lost(snapshot, observation)
+    if snapshot.release_boundary is not None and (
+        observation.ad_active is True
+        or observation.state in {PlayerState.PLAYING, PlayerState.PAUSED}
+    ):
+        snapshot = replace(snapshot, release_boundary=None, release_confirmed=False)
     if observation.session_active is False:
+        if (
+            snapshot.release_boundary is not None
+            and observation.monotonic > snapshot.release_boundary
+            and snapshot.completion is not None
+            and not snapshot.stop_requested
+            and snapshot.receipt is not None
+            and snapshot.receipt.action == CommandAction.RELEASE
+            and snapshot.receipt.outcome == CommandOutcome.ACCEPTED
+        ):
+            return replace(
+                snapshot,
+                revision=snapshot.revision + 1,
+                latest=observation,
+                state=PlayerState.ENDED,
+                release_confirmed=True,
+                evidence=PlaybackEvidence(
+                    natural_completion_confirmed=True, reason=EvidenceReason.NATURAL_COMPLETION
+                ),
+            )
         if (
             snapshot.stop_requested
             and snapshot.stop_boundary is not None

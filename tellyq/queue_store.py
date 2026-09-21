@@ -458,7 +458,9 @@ class SQLiteQueueStore:
                 return snapshot
             _revision(snapshot, expected_revision)
             if not any(
-                a.attempt_id == attempt_id and a.intent == QueueIntent.CURRENT
+                a.attempt_id == attempt_id
+                and a.item_id == snapshot.current_item_id
+                and a.intent in {QueueIntent.CURRENT, QueueIntent.FINISHED}
                 for a in snapshot.attempts
             ):
                 raise QueueStoreError("stop requires an unresolved attempt")
@@ -469,6 +471,71 @@ class SQLiteQueueStore:
                 connection, snapshot, attempt_id, command_id, CommandAction.STOP, timestamp
             )
             return self._changed(connection, queue_id)
+
+    def prepare_control(
+        self,
+        queue_id: str,
+        *,
+        attempt_id: str,
+        command_id: str,
+        action: CommandAction,
+        at: datetime,
+        expected_revision: int,
+    ) -> QueueSnapshot:
+        if action not in {CommandAction.PAUSE, CommandAction.RESUME, CommandAction.RELEASE}:
+            raise ValueError("control must be pause, resume or release")
+        _identity(command_id)
+        timestamp = _timestamp(at)
+        with self._transaction() as connection:
+            snapshot = self._required(connection, queue_id)
+            if self._duplicate(snapshot, command_id, attempt_id, action):
+                return snapshot
+            _revision(snapshot, expected_revision)
+            expected = (
+                QueueIntent.FINISHED if action == CommandAction.RELEASE else QueueIntent.CURRENT
+            )
+            if snapshot.cancellation_requested or not snapshot.attempts:
+                raise QueueStoreError("control requires an uncanceled current owner")
+            attempt = snapshot.attempts[-1]
+            if (
+                attempt.attempt_id != attempt_id
+                or attempt.item_id != snapshot.current_item_id
+                or attempt.intent != expected
+                or (action == CommandAction.RELEASE and not attempt.decision_id)
+                or any(
+                    c.state
+                    in {ExecutionState.PENDING, ExecutionState.DISPATCHED, ExecutionState.UNCERTAIN}
+                    for c in snapshot.commands
+                )
+            ):
+                raise QueueStoreError("control requires the resolved latest attempt")
+            if action == CommandAction.RELEASE and any(
+                c.attempt_id == attempt_id and c.action == CommandAction.RELEASE
+                for c in snapshot.commands
+            ):
+                raise QueueStoreError(
+                    "release was already attempted; reconcile instead of resending"
+                )
+            self._command(connection, snapshot, attempt_id, command_id, action, timestamp)
+            return self._changed(connection, queue_id)
+
+    def prepare_release(
+        self,
+        queue_id: str,
+        *,
+        attempt_id: str,
+        command_id: str,
+        at: datetime,
+        expected_revision: int,
+    ) -> QueueSnapshot:
+        return self.prepare_control(
+            queue_id,
+            attempt_id=attempt_id,
+            command_id=command_id,
+            action=CommandAction.RELEASE,
+            at=at,
+            expected_revision=expected_revision,
+        )
 
     def cancel_queue(self, queue_id: str, *, expected_revision: int) -> QueueSnapshot:
         """Persist local cancellation even before an attempt or between items."""
@@ -535,12 +602,22 @@ class SQLiteQueueStore:
                     raise QueueStoreError(
                         "an uncertain or completed command cannot be redispatched"
                     )
-                if command.action == CommandAction.START and snapshot.cancellation_requested:
+                if command.action != CommandAction.STOP and snapshot.cancellation_requested:
                     raise QueueStoreError("start was canceled before dispatch")
                 attempt = next(a for a in snapshot.attempts if a.attempt_id == command.attempt_id)
-                if attempt.intent != QueueIntent.CURRENT or not any(
-                    item.item_id == attempt.item_id and item.intent == QueueIntent.CURRENT
-                    for item in snapshot.items
+                allowed = {QueueIntent.CURRENT}
+                if command.action in {CommandAction.RELEASE, CommandAction.STOP}:
+                    allowed.add(QueueIntent.FINISHED)
+                if command.action == CommandAction.RELEASE:
+                    allowed = {QueueIntent.FINISHED}
+                if (
+                    attempt != snapshot.attempts[-1]
+                    or attempt.item_id != snapshot.current_item_id
+                    or attempt.intent not in allowed
+                    or not any(
+                        item.item_id == attempt.item_id and item.intent == attempt.intent
+                        for item in snapshot.items
+                    )
                 ):
                     raise QueueStoreError("dispatch requires a current unresolved attempt")
             elif command.state not in {ExecutionState.DISPATCHED, ExecutionState.UNCERTAIN}:
@@ -609,7 +686,8 @@ class SQLiteQueueStore:
             _revision(snapshot, expected_revision)
             if not any(a.intent == QueueIntent.CURRENT for a in snapshot.attempts) and not any(
                 c.generation == snapshot.generation
-                and c.state in {ExecutionState.PENDING, ExecutionState.DISPATCHED}
+                and c.state
+                in {ExecutionState.PENDING, ExecutionState.DISPATCHED, ExecutionState.UNCERTAIN}
                 for c in snapshot.commands
             ):
                 return snapshot

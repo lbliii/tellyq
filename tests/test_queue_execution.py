@@ -460,8 +460,6 @@ def test_duplicate_during_inflight_effect_reads_dispatched_without_reinvoking(st
         {"item_id": ""},
         {"attempt_id": ""},
         {"action": "start"},
-        {"action": CommandAction.PAUSE},
-        {"action": CommandAction.RESUME},
         {"expected_revision": -1},
         {"expected_generation": -1},
         {"expected_revision": True},
