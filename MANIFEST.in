@@ -4,6 +4,7 @@ recursive-include docs *.md
 recursive-include examples *.json
 recursive-include scripts *.py
 recursive-include tests *.py
+recursive-include tests/fixtures/cast *.json *.md
 include tellyq/py.typed
 prune runtime
 prune logs

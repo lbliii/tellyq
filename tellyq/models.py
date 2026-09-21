@@ -18,7 +18,7 @@ class Observation(TypedDict, total=False):
     kind: Required[str]
     observed_at: str
     monotonic: float
-    empty_status: bool
+    empty_status: bool | None
     media_session_id: int | None
     content_id: str | None
     title: str | None
@@ -26,7 +26,7 @@ class Observation(TypedDict, total=False):
     position: float | None
     duration: float | None
     idle_reason: str | None
-    ad_break: bool
+    ad_break: bool | None
     app_id: str | None
     app_name: str | None
     app_session_id: str | None
