@@ -28,13 +28,16 @@ def record_receipt(snapshot: SessionSnapshot, receipt: CommandReceipt) -> Sessio
     return replace(result, revision=result.revision + 1, receipt=receipt)
 
 
-def request_stop(snapshot: SessionSnapshot) -> SessionSnapshot:
+def request_stop(snapshot: SessionSnapshot, *, boundary: float | None = None) -> SessionSnapshot:
     """Cancel natural advancement before sending any remote stop effect."""
+    if boundary is not None:
+        require_instant(boundary, "stop boundary")
     return replace(
         snapshot,
         revision=snapshot.revision + 1,
         stop_requested=True,
-        evidence=replace(snapshot.evidence, natural_completion_confirmed=False),
+        stop_boundary=boundary if boundary is not None else snapshot.stop_boundary,
+        evidence=PlaybackEvidence(),
     )
 
 
@@ -94,13 +97,56 @@ def observe(
         or not 0 <= now - observation.monotonic <= policy.max_age_seconds
     ):
         return snapshot
-    latest = snapshot.latest
-    if latest is not None and (
-        observation.sequence <= latest.sequence or observation.monotonic <= latest.monotonic
+    if observation.sequence <= snapshot.last_sequence or (
+        snapshot.last_monotonic is not None and observation.monotonic <= snapshot.last_monotonic
     ):
         return snapshot
-    if (observation.session_id is not None and observation.session_id != scope.session_id) or (
-        observation.content is not None and observation.content != scope.request.content
+    snapshot = replace(
+        snapshot, last_sequence=observation.sequence, last_monotonic=observation.monotonic
+    )
+    if observation.connection_reset:
+        return replace(
+            snapshot,
+            revision=snapshot.revision + 1,
+            latest=observation,
+            state=PlayerState.UNKNOWN,
+            progress_anchor=None,
+            has_confirmed_playback=False,
+            ownership_lost=True,
+            evidence=PlaybackEvidence(reason=EvidenceReason.SESSION_REPLACED),
+        )
+    if observation.session_active is False:
+        if (
+            snapshot.stop_requested
+            and snapshot.stop_boundary is not None
+            and observation.monotonic > snapshot.stop_boundary
+        ):
+            return replace(
+                snapshot,
+                revision=snapshot.revision + 1,
+                latest=observation,
+                state=PlayerState.STOPPED,
+                progress_anchor=None,
+                evidence=PlaybackEvidence(reason=EvidenceReason.STOP_OBSERVED),
+            )
+        return replace(
+            snapshot,
+            revision=snapshot.revision + 1,
+            latest=observation,
+            state=PlayerState.UNKNOWN,
+            evidence=PlaybackEvidence(reason=EvidenceReason.SESSION_REPLACED),
+            progress_anchor=None,
+            has_confirmed_playback=False,
+            ownership_lost=True,
+        )
+    if (
+        (
+            observation.application_id is not None
+            and scope.application_id is not None
+            and observation.application_id != scope.application_id
+        )
+        or (observation.session_id is not None and observation.session_id != scope.session_id)
+        or (observation.content is not None and observation.content != scope.request.content)
     ):
         return replace(
             snapshot,
@@ -112,6 +158,9 @@ def observe(
             has_confirmed_playback=False,
             ownership_lost=True,
         )
+    if observation.session_active is True and observation.session_id == scope.session_id:
+        # Matching control-plane status supplies ownership, not new media evidence.
+        return replace(snapshot, revision=snapshot.revision + 1)
     if observation.session_id is None or observation.content is None:
         return _unconfirmed(snapshot, observation, EvidenceReason.IDENTITY_UNKNOWN)
     if observation.ad_active is not False:
@@ -154,6 +203,7 @@ def observe(
     confirmed = (
         anchor is not None
         and anchor.position is not None
+        and anchor.playback_id == observation.playback_id
         and now - anchor.monotonic <= policy.max_age_seconds
         and observation.monotonic - anchor.monotonic >= policy.min_progress_interval_seconds
         and observation.position > anchor.position
@@ -163,6 +213,7 @@ def observe(
     if (
         anchor is None
         or anchor.position is None
+        or anchor.playback_id != observation.playback_id
         or confirmed
         or observation.position < anchor.position
         or observation.monotonic - anchor.monotonic >= policy.max_age_seconds

@@ -1,7 +1,7 @@
 """Typed records for the current JSON interface; no device or framework dependencies.
 
-These describe the existing experiment. The richer domain contracts in the
-architecture plan will be introduced with the session runner.
+Report version 1 retains the original CLI fields and adds explicit evidence
+reasons. Snapshot records store durable identity, never process-local evidence.
 """
 
 from typing import NotRequired, Required, TypedDict
@@ -16,6 +16,10 @@ class Device(TypedDict):
 
 class Observation(TypedDict, total=False):
     kind: Required[str]
+    playback_id: str | None
+    sequence: int
+    connection_generation: str
+    source: str
     observed_at: str
     monotonic: float
     empty_status: bool | None
@@ -43,12 +47,16 @@ class Evidence(TypedDict):
     playing_observed: NotRequired[bool]
     advancing_position_observed: NotRequired[bool]
     visual_confirmation: NotRequired[bool | None]
+    natural_completion_confirmed: NotRequired[bool]
+    reason: NotRequired[str]
 
 
 class CommandReceipt(TypedDict):
     action: str
     requested_at: str
+    recorded_at: NotRequired[str]
     returned: bool
+    outcome: NotRequired[str]
 
 
 class QueueItem(TypedDict):
@@ -74,6 +82,10 @@ class Error(TypedDict):
 
 
 class Report(TypedDict, total=False):
+    schema_version: int
+    observed_state: str
+    attempt_id: str
+    capabilities: dict[str, str]
     command: str
     started_at: str
     ended_at: str
@@ -91,3 +103,24 @@ class Report(TypedDict, total=False):
     stop_verification_source: str | None
     error: Error
     report_path: str
+
+
+class SnapshotRecord(TypedDict):
+    """Durable identity and history only; monotonic evidence is deliberately absent."""
+
+    schema_version: int
+    revision: int
+    request_id: str
+    attempt_id: str
+    queue_item_id: str
+    provider: str
+    content_kind: str
+    content_id: str
+    title: str | None
+    device_id: str
+    route: str
+    name: str | None
+    session_id: str
+    application_id: str | None
+    historical_state: str
+    stop_requested: bool

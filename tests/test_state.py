@@ -214,13 +214,12 @@ def test_unknown_fields_are_rejected_without_rewriting_existing_state(
 
 @pytest.mark.parametrize("command", ["start", "status", "stop", "probe"])
 @pytest.mark.parametrize("name", ["queue.json", "session.json"])
-def test_invalid_state_fails_before_controller_connects(tmp_path, monkeypatch, command, name):
+def test_invalid_state_fails_before_controller_connects(tmp_path, command, name):
     from tellyq.controller import execute
 
     connect = Mock(side_effect=AssertionError("Controller must validate before connecting"))
-    monkeypatch.setattr("tellyq.controller.connect", connect)
     write_unchecked(tmp_path / name, {"device_id": DEVICE_ID})
-    report, code = execute(command, tmp_path, device_id=DEVICE_ID)
+    report, code = execute(command, tmp_path, device_id=DEVICE_ID, backend_factory=connect)
     assert code == 1
     assert report["error"]["type"] == "ValueError"
     assert report["commands"] == []
