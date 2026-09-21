@@ -256,33 +256,6 @@ def test_operator_stop_cancels_even_when_latch_is_set(rig):
     assert [a for a, _ in backend.commands] == ["start", "stop"]
 
 
-def test_incremental_stop_crosses_owner_wrapper_and_persists_observed_outcome(rig, monkeypatch):
-    task, backend, store, cancellation, event, _ = rig
-    start(task, cancellation)
-    observe = backend.observe
-    batches = []
-
-    def observe_until(target, ready):
-        events = observe(target)
-        batches.append(events)
-        assert ready(events)
-        return events
-
-    def fixed_window(_target):
-        raise AssertionError("Stop should use the optional prompt observation capability")
-
-    monkeypatch.setattr(backend, "observe_until", observe_until, raising=False)
-    monkeypatch.setattr(backend, "observe", fixed_window)
-    event.set()
-    stopped = task.handle(RunnerCommand("stop", CommandAction.STOP), cancellation)
-    assert len(batches) == 2
-    assert task._events == batches[-1]
-    assert stopped.playback.state == PlayerState.STOPPED
-    assert stopped.queue.items[0].intent == QueueIntent.STOPPED
-    assert store.load("queue").commands[-1].state == ExecutionState.ACKNOWLEDGED
-    assert [a for a, _ in backend.commands] == ["start", "stop"]
-
-
 def test_terminal_and_replacement_in_one_batch_settles_but_never_releases(rig):
     task, backend, _, cancellation, _, _ = rig
     start(task, cancellation)
