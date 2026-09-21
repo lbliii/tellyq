@@ -71,11 +71,13 @@ The diagnostic stage identifies the boundary that produced a result:
 | `receiver` | A recognized `MEDIA_STATUS`, `INVALID_REQUEST` or `INVALID_PLAYER_STATE` response was received. |
 
 For example, `transport_guard/state_mismatch` is a local refusal, while
-`receiver/invalid_player_state` is an explicit receiver response. An application
-guard error has no command receipt or pre-dispatch intent; it remains a
-`ValueError`-compatible `ControlRefused` exception for API callers. The CLI keeps
-its safe message and diagnostic in `error`. Backend/transport results put the
-diagnostic on the receipt and also on `error` for rejected or unknown outcomes.
+`receiver/invalid_player_state` is an explicit receiver response. Application
+`ControlRefused` exceptions have no command receipt or pre-dispatch intent and
+remain `ValueError`-compatible for API callers. The CLI keeps their safe message
+and diagnostic in `error`. An application capability refusal instead returns a
+REJECTED receipt with `application/capability_unavailable`, without dispatch.
+Backend/transport results put the diagnostic on the receipt and also on `error`
+for rejected or unknown outcomes.
 The additive typed transport result is `ControlResponse`; older boolean/`None`
 adapters remain supported with `transport/legacy_result`, which deliberately does
 not attribute a rejection to the receiver. Transport exceptions and timeout or
