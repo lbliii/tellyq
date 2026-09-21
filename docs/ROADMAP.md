@@ -230,16 +230,17 @@ separate compatibility lane, not a prerequisite for the useful release.
 
 ## Immediate next work
 
-The first M2b component wave merged at `9715b58` and passes 832 offline tests.
-The [composition wave](M2B-PLAN.md) connects playback, release/idle handoffs,
-the foreground CLI and private IPC. See [the service guide](FOREGROUND-SERVICE.md)
-for explicit startup, ticket/evidence semantics and recovery. Synthetic handoffs
-do not establish live receiver acceptance. The actual post-finish code-5/reset
-trace remains an explicit HOLD because its meaning is unproven.
+The M2b foreground composition merged at `b4ff7d3` and passes 965 offline tests.
+Its [live checkpoint](M2B-CHECKPOINT.md) verified exclusive ownership, responsive
+cached status, playback, durable natural completion, cancellation, stop and a
+status-only reopen without replay. The next item held before release. Active-stop
+acknowledgement was 96.94 ms; the client-visible verified outcome took 10,431.17 ms,
+including CLI startup and polling, narrowly missing the ten-second target.
 
-The first runner checkpoint must prove single ownership, responsive status/stop,
-no duplicate dispatch after crash/restart, and a hold on replacement content.
-Automatic handoff acceptance follows integration: three three-item sessions with
-six correct handoffs, plus interruption/recovery cases. The new checkpoint's
-code-1081 evidence is useful but does not validate every ad path; expand live
-coverage where those cases occur. Do not substitute elapsed runtime for completion.
+The [closing workstreams](M2B-PLAN.md#closing-workstreams) expose precise handoff
+holds, reduce unnecessary stop observation waiting, and add reproducible composed
+recovery and acceptance checks. A supported live A → B transition is the next
+hardware gate; three three-item sessions and six correct handoffs are still
+required. Preserve the unknown code-5/reset hold and replacement/ad protections.
+The earlier code-1081 evidence does not validate every ad path. Do not substitute
+elapsed runtime for completion or synthetic tests for live acceptance.

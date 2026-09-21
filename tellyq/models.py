@@ -439,3 +439,39 @@ class IPCResponse(TypedDict):
     snapshot: NotRequired[IPCRunnerSnapshot]
     ticket: NotRequired[IPCTicket]
     ticket_id: NotRequired[str]
+
+
+class ServiceCheckpointTiming(TypedDict):
+    action: IPCAction
+    submitted_ms: float
+    acknowledgement_ms: float | None
+    ticket_completed_ms: float | None
+    first_verified_state_ms: float | None
+    ticket_state: str | None
+    accepted: bool
+
+
+class ServiceCheckpointItem(TypedDict):
+    index: int
+    verified_at_ms: float | None
+    finished_at_ms: float | None
+    distinct_attempts_observed: int
+
+
+class ServiceCheckpointSummary(TypedDict):
+    schema_version: Literal[1]
+    mode: Literal["trace", "start"]
+    code_revision: str | None
+    elapsed_ms: float
+    poll_seconds: float
+    clock_resolution_seconds: float
+    timing_origin: Literal["client_monotonic"]
+    handoff_diagnostics_available: bool
+    stop_reason: str
+    error_type: str | None
+    items: list[ServiceCheckpointItem]
+    verified_handoffs: int
+    commands: list[ServiceCheckpointTiming]
+    cleanup: str
+    visual_confirmation: None
+    live_acceptance: Literal[False]

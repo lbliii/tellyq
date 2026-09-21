@@ -285,6 +285,7 @@ def wire_view(view: TaskView) -> IPCTaskView:
             if completion
             else None,
             "receipt": {
+                "request_id": receipt.request_id,
                 "action": receipt.action.value,
                 "outcome": receipt.outcome.value,
                 "recorded_at": receipt.recorded_at.isoformat(),

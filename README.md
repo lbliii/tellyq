@@ -56,8 +56,13 @@ attempt and remaining limits. The [M2b plan](docs/M2B-PLAN.md) starts the persis
 owner, queue policy and durable execution work. Those components merged at
 `9715b58`, which passes 832 offline tests. The composition adds an explicit
 [foreground service](docs/FOREGROUND-SERVICE.md), private local commands and guarded
-queue handoffs. Automated synthetic scenarios pass; the M2b live handoff gate is
-still pending. Observed YouTube code-5/reset behavior deliberately holds the queue.
+queue handoffs, merged at `b4ff7d3` with 965 passing offline tests. The
+[foreground-service checkpoint](docs/M2B-CHECKPOINT.md) verified playback, durable
+natural completion, cancellation, stop and a status-only reopen. The successor
+held, and one active-stop measurement took 10.431 seconds against a ten-second
+target. M2b remains open; the [closing workstreams](docs/M2B-PLAN.md#closing-workstreams)
+address diagnostics, responsiveness and recovery acceptance. Earlier unexplained
+YouTube code-5/reset behavior retains its protective hold.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
 
@@ -133,8 +138,9 @@ commit hooks, dependency changes and the macOS/Linux CI checks. For a sandbox-lo
 uv cache, prefix uv commands with `UV_CACHE_DIR=runtime/uv-cache`.
 
 See [implementation work and verification](docs/IMPLEMENTATION.md) and the
-[commit-specific completion checkpoint](docs/M2A-CHECKPOINT.md). No live automatic
-queue advancement test has been performed.
+[commit-specific completion checkpoint](docs/M2A-CHECKPOINT.md). The first
+[foreground-service checkpoint](docs/M2B-CHECKPOINT.md) held before advancement;
+successful live automatic queue advancement remains unverified.
 
 ## Longer-term direction
 

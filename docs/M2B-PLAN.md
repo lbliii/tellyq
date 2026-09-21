@@ -231,3 +231,101 @@ IFrame API numeric values were not substituted. The next supervised checkpoint
 tests foreground ownership/status/stop/shutdown first, then attempts supported
 handoffs. Three three-item live sessions and six handoffs are still required to
 close the milestone.
+
+## Closing workstreams
+
+PRs #27–29 are merged at `b4ff7d3`. The
+[foreground-service checkpoint](M2B-CHECKPOINT.md) passed ownership, playback,
+durable completion, cancellation and status-only reopen checks. Automatic release
+held, so no successor started. Active-stop acknowledgement was below one second;
+the measured client-visible outcome was 10,431.17 ms, above the ten-second target.
+
+The closing swarm starts three independent branches from that exact `main`.
+Every PR targets `main`; no branch requires an unmerged sibling to pass its tests.
+
+| Workstream | Branch | Deliverable and review gate |
+| --- | --- | --- |
+| Handoff diagnosis | [PR #31](https://github.com/lbliii/tellyq/pull/31), `codex/m2-handoff-diagnostics` | Typed, sanitized hold reasons and evidence through cached status; replay actual ending/reset shapes and retain takeover/ad vetoes. Repair only behavior supported by evidence. Unknown code 5 is not reinterpreted by numeric coincidence. |
+| Stop responsiveness | [PR #30](https://github.com/lbliii/tellyq/pull/30), `codex/m2-stop-latency` | Return once sufficient correlated stop evidence is available, preserving the observation deadline, ownership checks and queued contradictions. Keep command acknowledgement separate from verified outcome. |
+| Recovery and acceptance | [PR #32](https://github.com/lbliii/tellyq/pull/32), `codex/m2-recovery-acceptance` | Composed crash-boundary tests and an explicit, bounded service checkpoint tool with reproducible timing and a sanitized record. No hardware effects in normal tests. |
+
+Shared protocol/JSON changes are coordinated, and the exact combined candidate
+must pass lint, formatting, types, offline tests and packaging/install checks.
+Agents do not discover or control devices. The next hardware checkpoint is a
+separately requested, supervised run after review; publishing these PRs alone does
+not accept M2.
+
+Acceptance proceeds in this order:
+
+1. Inspect one fresh natural ending's exact hold/eligibility evidence. If it holds,
+   keep the queue safe and fix the supported cause; do not retry indefinitely or
+   bypass an unknown provider state to force a handoff.
+2. Demonstrate one supported automatic A → B handoff with no duplicate dispatch.
+3. Measure foreground active stop: local acknowledgement within one second and
+   the first client-visible verified outcome within ten seconds. Record actual
+   polling resolution and distinguish receiver timestamps from client timings.
+4. Complete three three-item sessions with six correct automatic handoffs,
+   foreground pause/resume and cancellation that prevents further advancement.
+5. Exercise pre-dispatch, post-dispatch/pre-acknowledgement and post-completion
+   interruption/reopen boundaries. Retain uncertainty and never replay device
+   effects silently. Record which cases use a synthetic backend and which are live.
+
+The final commit-specific acceptance record must identify the tested revision,
+observed transitions, delays, recovery outcomes, visual confirmations and remaining
+limits. M3 CLI/MCP work begins after this gate, not as a substitute for it.
+
+
+## Closing-stream validation
+
+The independently tested heads were combined without conflicts in an isolated
+checkout. Initial local code candidate `98ec6702daf48f3d6db69c8a0ee45436ccc8df66`, tree
+`e9d120b979207f717dbcb9f6dd58a132f4bafd9e`, passed locked Python 3.14 `poe ci`:
+1,089 tests, 90.7% branch-inclusive coverage, Ruff, formatting, ty, source/wheel
+builds and isolated installation.
+
+| Independent PR | Initially tested code head |
+| --- | --- |
+| [Stop responsiveness #30](https://github.com/lbliii/tellyq/pull/30) | `7e8d8014bdad95feaebf41098204b232c8d34e10` |
+| [Handoff diagnostics #31](https://github.com/lbliii/tellyq/pull/31) | `db3322484cbce791e666b86c2d41dc35feacc30b` |
+| [Recovery and acceptance #32](https://github.com/lbliii/tellyq/pull/32) | `293e9fe0fe0f20de14f1988c578de2df22c72544` |
+
+Recovery production head `293e9fe` independently passed 994 tests and preflight. Its private
+service checkpoint correlates command timing to the canonical ticket and attempt;
+failed/canceled tickets and another client's same-action receipt cannot supply
+verification. Five actual process-loss scenarios preserve uncertain work without
+replay, and a synthetic three-item service run observes two handoffs. See the
+[acceptance procedure and evidence limits](M2-ACCEPTANCE.md).
+
+PRs #30 and #31 also passed their Python 3.14 macOS/Linux GitHub workflows.
+This record is a documentation-only follow-up to the exact tested code heads.
+No hardware ran for these closing streams. The live three-session gate above and
+the previous measured stop-target miss remain open; test success does not accept M2.
+
+
+### CI scheduling regression and final validation
+
+The initial local pass above preceded a CI scheduling failure in the new synthetic
+checkpoint scenario: [macOS at `293e9fe`](https://github.com/lbliii/tellyq/actions/runs/35646720084)
+missed a short-lived verified playback sample, while Linux passed. The subsequent
+[documentation head `f74928d`](https://github.com/lbliii/tellyq/actions/runs/35646724230)
+failed the same assertion on Linux while macOS passed. These failures are retained;
+the earlier local pass did not establish a deterministic fixture.
+
+Test-only fix `4e48a9b93ae53d80e17209a4c44001fe2d5a8f71` gates each synthetic
+ending on an Event signaled after the real IPC checkpoint client receives that
+item's verified PLAYING snapshot. Cached status stays readable while the owner
+waits. The assertions and production evidence rules are unchanged. The scenario
+passes 20 repeated covered runs across 50 ms and 300 ms polling, and the independent
+branch passes locked `poe check` with 995 tests, Ruff, formatting and ty.
+Both [branch CI](https://github.com/lbliii/tellyq/actions/runs/35647094581) and
+[PR CI](https://github.com/lbliii/tellyq/actions/runs/35647099555) pass their
+Python 3.14 macOS/Linux jobs on this exact fixed head.
+
+The final local validation candidate `b0726f861e8605bd0fe53978516b3eea58f0704c`,
+tree `72ee2fb62dd7dcb1272342e03f094247981715ff`, combines the same PR #30 and #31
+heads above with PR #32 at `4e48a9b93ae53d80e17209a4c44001fe2d5a8f71`.
+Its locked `poe ci` passes **1,090 tests**, 90.7% branch-inclusive coverage, Ruff,
+formatting, ty, source/wheel builds and isolated installation. This is an isolated
+local validation candidate, not a fourth PR; the three public PRs remain independent.
+This final record changes documentation only. No new live acceptance evidence was
+created, and the three-session hardware gate remains pending.
