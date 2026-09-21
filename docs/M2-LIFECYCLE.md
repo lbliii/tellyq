@@ -150,9 +150,11 @@ See [PyChromecast 14.0.10 MediaStatus.update](https://github.com/home-assistant-
 Google's [media protocol](https://developers.google.com/cast/docs/media/messages)
 allows status updates to omit unchanged media information and distinguishes natural
 FINISHED from cancellation, interruption and error. Omission alone is therefore
-not malformed. However, applying session-based identity carry-forward to this
-receiver would contradict the observed same-ID content change. This is a limitation
-of the available evidence, not a protocol guarantee that the old content finished.
+not malformed. However, the observed same-ID content change rules out attributing
+an ending from media-session identity alone. Ordered content history with reviewed
+boundaries might support future attribution; these traces do not establish whether
+that would be sufficient. Missing terminal identity and unknown ads still block
+the current strict completion policy.
 
 The [MediaStatus reference](https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.messages.MediaStatus)
 defines optional `breakStatus`, application-specific `customData`, extended loading
