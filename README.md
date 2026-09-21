@@ -70,8 +70,10 @@ The optional [native YouTube runner](docs/NATIVE-QUEUE-RUNNER.md) now connects t
 durable queue to receiver-managed successors. It reserves one next item, verifies
 its playback before adoption, and reconciles authorized playback on reconnect
 without sending new work. It is opt-in through `"mode": "native"`; existing
-manifests retain legacy behavior. Its composed-runner hardware checkpoint is still
-pending, so M2 remains open. The new example uses quiet nature clips.
+manifests retain legacy behavior. The [merged-runner checkpoint](docs/NATIVE-RUNNER-CHECKPOINT.md)
+passed one three-item sequence, active stop and reconnect, but a second sequence
+held after its middle item. M2 remains open pending repeatable handoffs. The new
+example uses quiet nature clips.
 
 For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and
 [architecture direction](docs/ARCHITECTURE.md). They cover typed contracts,

@@ -6,6 +6,12 @@ TV visibility, live stop latency, or provider behavior. The previous service
 checkpoint and its 10.43117-second client-visible stop measurement are preserved
 in [M2B-CHECKPOINT.md](M2B-CHECKPOINT.md).
 
+The later [native-runner checkpoint](NATIVE-RUNNER-CHECKPOINT.md) at `28d043d`
+passed one three-item sequence, active cancellation and process-loss recovery.
+A second sequence stalled after its middle item despite acknowledged enqueue;
+the required repeated-session gate remains unmet. That record preserves the
+failed attempt and separates the checkpoint script's exit-code reporting fix.
+
 The remaining live gate is three three-item sessions with six correct automatic
 handoffs, no duplicate starts, verified pause/resume, cancellation preventing the
 next item, verified active stop, and restart recovery without replay. Verify the
