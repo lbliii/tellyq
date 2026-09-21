@@ -1,7 +1,7 @@
 """Cast adapter: wire parsing, callback correlation and bounded device effects."""
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from math import isfinite
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -30,6 +30,13 @@ from .models import Device, Observation
 
 if TYPE_CHECKING:
     from .cast import Connection
+
+
+@runtime_checkable
+class PendingObservationTransport(Protocol):
+    """Optional nonblocking access to already normalized callbacks after interrupted I/O."""
+
+    def drain_pending(self) -> list[Observation]: ...
 
 
 def video_id(content_id: str | None) -> str | None:
@@ -267,9 +274,16 @@ class CastBackend:
 
     def observe(self, target: PlaybackTarget) -> tuple[PlaybackObservation, ...]:
         self._target(target)
-        raw = self.transport.observe(self._window)
+        try:
+            raw = self.transport.observe(self._window)
+        except Exception, KeyboardInterrupt:
+            if isinstance(self.transport, PendingObservationTransport):
+                # Preserve the original failure if even the local drain fails.
+                with suppress(Exception, KeyboardInterrupt):
+                    self._remember_raw(self.transport.drain_pending())
+            raise
         self._window = 6
-        self.raw_observations.extend(event.copy() for event in raw)
+        self._remember_raw(raw)
         result: list[PlaybackObservation] = []
         for event in raw:
             instant = event.get("monotonic")
@@ -304,8 +318,31 @@ class CastBackend:
             observation = self._translate(base, event)
             if observation is not None:
                 result.append(observation)
-                self._identity_history.append(observation)
+                if not self.read_only:
+                    self._identity_history.append(observation)
         return tuple(result)
+
+    def _remember_raw(self, raw: list[Observation]) -> None:
+        if self.read_only:
+            self.raw_observations = [event.copy() for event in raw]
+        else:
+            self.raw_observations.extend(event.copy() for event in raw)
+
+    def observe_window(
+        self, target: PlaybackTarget, seconds: float
+    ) -> tuple[PlaybackObservation, ...]:
+        """Observe a short diagnostic window without retaining effect ownership history."""
+        if not self.read_only:
+            raise ValueError("Bounded capture requires an observation-only backend.")
+        if isinstance(seconds, bool) or not isfinite(seconds) or not 0 < seconds <= 2:
+            raise ValueError("Capture windows must be positive and at most two seconds.")
+        self._window = seconds
+        return self.observe(target)
+
+    def drain_raw_observations(self) -> list[Observation]:
+        """Transfer normalized wire records; these are not original protocol frames."""
+        result, self.raw_observations = self.raw_observations, []
+        return result
 
     def _translate(
         self, base: PlaybackObservation, event: Observation
@@ -396,6 +433,9 @@ class _Transport:
 
     def observe(self, seconds: float) -> list[Observation]:
         return self.connection.observe(seconds)
+
+    def drain_pending(self) -> list[Observation]:
+        return self.connection.drain()
 
     def play(self, content_id: str) -> None:
         self.connection.youtube.play_video(content_id)

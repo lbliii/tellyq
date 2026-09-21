@@ -4,7 +4,7 @@ Report version 1 retains the original CLI fields and adds explicit evidence
 reasons. Snapshot records store durable identity, never process-local evidence.
 """
 
-from typing import NotRequired, Required, TypedDict
+from typing import Literal, NotRequired, Required, TypedDict
 
 
 class Device(TypedDict):
@@ -126,3 +126,22 @@ class SnapshotRecord(TypedDict):
     application_id: str | None
     historical_state: str
     stop_requested: bool
+
+
+class LifecycleRecord(Report):
+    """Incremental normalized lifecycle journal; passive attachment is never a full run."""
+
+    kind: Literal["begin", "window", "gap", "end"]
+    capture_id: str
+    provenance: Literal["live", "synthetic", "sanitized-live"]
+    sequence: int
+    recorded_at: str
+    monotonic: float
+    mode: Literal["passive"]
+    entire_run_observed: Literal[False]
+    external_control_unobserved: Literal[True]
+    attached: NotRequired[bool]
+    partial: NotRequired[bool]
+    gap_seconds: NotRequired[float]
+    gap_kind: NotRequired[Literal["transport", "media"]]
+    stop_reason: NotRequired[Literal["deadline", "interrupted", "backend_error", "cancelled"]]
