@@ -3,7 +3,8 @@
 **M2 is closed with a known reliability limitation as of 2026-09-21.** The
 [closeout record](M2-ACCEPTANCE.md) counts three completed three-item sessions
 across four attempts and preserves the stalled attempt in
-[issue #42](https://github.com/lbliii/tellyq/issues/42). M3 is ready to begin.
+[issue #42](https://github.com/lbliii/tellyq/issues/42). M3's first MCP foundation
+is implemented and tested offline; its full acceptance gate remains open.
 Further provider diagnostics are bounded bug work; they do not add M2 requirements.
 
 Updated 2026-09-21. M0's hardware proof is verified. M1's domain contracts,

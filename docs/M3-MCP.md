@@ -63,7 +63,9 @@ payload remains the versioned typed contract in `tellyq/models.py`.
 
 The repository now has offline subprocess coverage for the real initialize,
 tools/list, tools/call, invalid-argument and unknown-tool protocol paths, plus
-owner-command parity and owner survival after MCP exit. Full CLI/direct-Python
-parity review, Milo verification against the packaged entry point, and one
+owner-command parity and owner survival after MCP exit. Packaging smoke also
+installs the optional extra and checks the built wheel's stdio handshake and
+tool list from outside the checkout. Full CLI/direct-Python parity review,
+Milo verification against the packaged entry point, and one
 supervised hardware start/status/stop run remain to be completed. Pause/resume,
 planner/UI routes, hosted transports and live acceptance are outside this slice.

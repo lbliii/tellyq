@@ -96,7 +96,7 @@ def build_cli(runtime: Path) -> CLI:
     """Build the three-tool Milo CLI around one fixed owner runtime."""
     try:
         from milo import CLI
-    except ImportError as exc:  # pragma: no cover - exercised by packaging smoke
+    except ImportError as exc:
         raise RuntimeError(
             "The optional MCP interface requires the 'mcp' dependency extra."
         ) from exc
@@ -107,6 +107,8 @@ def build_cli(runtime: Path) -> CLI:
         version="0.1.0",
     )
 
+    # Milo 0.4.3 misrepresents recursive aliases and nullable values in output
+    # schemas. Advertise an object here; _call retains the typed MCPResult.
     @cli.command(
         "start",
         description=(
