@@ -1,4 +1,4 @@
-# First playback implementation
+# Playback implementation history
 
 ## Scope and order
 
@@ -39,7 +39,7 @@ Keep device addresses, UUIDs, pairing data and run reports in `runtime/`, out of
 - Software stop takes effect, with the source of verification recorded.
 - Buffering, ads, missing data and app launch alone do not count as success.
 
-## Outcome: first milestone passed, 2026-09-21
+## Outcome: M0 playback proof passed, 2026-09-21
 
 - Python 3.14.0 works with released PyChromecast 14.0.10 and its locked dependencies.
   The installed stable interpreter uses the GIL. Existing free-threaded shortcuts
@@ -58,8 +58,9 @@ Keep device addresses, UUIDs, pairing data and run reports in `runtime/`, out of
   separate human evidence, stored with the successful start report.
 - A fresh status connection observed continued progress without a playback command.
 - The final stop issued `quit_app` for the saved YouTube session. Subsequent receiver
-  events showed no running app, confirming session exit. The queue is `stopped`.
-- Sixteen automated tests pass. They cover target identity, uncertain commands,
+  events showed no running app, confirming session exit. The queue was `stopped`
+  at the end of that run; this is not a statement about current local state.
+- Sixteen automated tests passed at that checkpoint. They cover target identity, uncertain commands,
   missing observations, false completion, repeated start/status behavior, session
   ownership for stop, atomic state writes and overlapping command protection.
 
@@ -82,15 +83,57 @@ networking. The install smoke verifies imports and CLI help have no runtime side
 effects and creates only a synthetic local queue. Installed commands now place
 `runtime/` under the working directory. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-This completes the tooling part of M1; domain models, adapter/store/clock ports,
-complete boundary validation and the persistent runner remain planned. No live
-hardware session is repeated as part of repository setup.
+M1's foundation PRs have since merged: immutable domain values and ports, pure
+evidence rules, validated atomic JSON storage and defensive Cast normalization.
+The persistent session runner belongs to M2. No live hardware session is repeated
+as part of repository setup.
+
+## M1 foundation checkpoint, 2026-09-21
+
+The merged `main` checkpoint at `a2b72a9` passed 251 tests with 91.2% branch-inclusive
+coverage on standard Python 3.14.0. Ruff, formatting, ty 0.0.82, source/wheel builds
+and isolated installation checks passed. These results establish the component
+baseline; they do not establish that the controller uses every new contract.
+
+A separately requested live regression observed the exact Bob Ross content ID
+and advancing playback. The user confirmed visible playback; two status checks
+did not restart it. `quit_app` returned, and the user confirmed that the TV returned
+to the Chromecast home screen. That is the intended stop behavior, not a pause.
+However, the parser rejected idle receiver replies lacking `applications`; the
+report said `unconfirmed` and the queue retained `playing`. The visible stop
+succeeded, while software stop verification and persistence failed this checkpoint.
+
+Application integration, corrected stop evidence and a shared fake/Cast contract
+suite are the second M1 wave. [Stop-evidence PR #8](https://github.com/lbliii/tellyq/pull/8)
+at `a0f6219` and [application PR #9](https://github.com/lbliii/tellyq/pull/9) at
+`92bea46` each passed independent checks. Their exact combined candidate passed
+351 tests with 91.8% branch-inclusive coverage, Ruff/format/ty, source/wheel builds
+and isolated install/CLI smoke. These are offline results; no new hardware run,
+natural ending or automatic advancement was tested.
+
+PR #8 merged at `110cf52`, followed by PR #9 at `71a3c39`. The coordinator pulled
+actual `main` at `71a3c39` and reran `poe ci`: 351 tests, 91.8% branch-inclusive
+coverage and all lint/format/type/build/install checks passed. The merged-main
+[macOS/Linux CI run](https://github.com/lbliii/tellyq/actions/runs/35620756804)
+also passed.
+
+The coordinator then ran the explicitly requested hardware regression on that
+commit. Projector was initially idle; the user freshly confirmed visible Bob Ross.
+Exact content/title and PLAYING telemetry advanced from 23.434 seconds after start
+to 57.259 and 96.695 across two status reads in the same app/media session, without
+a restart. Ad state remained unknown, so strict playback proof remained
+unconfirmed; the raw progress and visual confirmation stayed separate evidence.
+The stop report confirmed receiver-app exit, the user confirmed the Chromecast
+home screen, and the queue persisted `stopped`. A new store instance restored stop
+intent with unknown current playback state, not old evidence. **M1 passed at
+`71a3c39`.** The [acceptance record](M1-ACCEPTANCE.md) preserves the detailed gates
+and remaining limitations.
 
 ## Material limits and next work
 
-The first milestone is complete. Full-episode completion, ads/buffering over an
-entire program and advancing to a second program have not been tested. The
-[roadmap](ROADMAP.md) adds a small typed-core milestone before validating those
+M0 and M1 are complete. Full-episode completion, ads/buffering over
+an entire program and advancing to a second program have not been tested. The
+[roadmap](ROADMAP.md) finishes the typed-core milestone before validating those
 observations and implementing automatic queue advancement. A Milo MCP interface
 can then expose the same application commands.
 

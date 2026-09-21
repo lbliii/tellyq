@@ -1,12 +1,24 @@
 # TellyQ architecture direction
 
-Proposed after the first hardware proof, 2026-09-21. This is a staged design, not a
-claim that these interfaces or dependencies have already been implemented.
+Updated after the M1 integration merge, 2026-09-21. This remains a staged design.
+Implemented boundaries and future interfaces are distinguished below; the diagram
+shows the intended direction, including later milestones.
 
-The repository baseline now has typed JSON records, annotated package functions,
-Ruff/ty/pytest, a uv lock and packaging/CI checks. The domain contracts and staged
-layout below remain the next refactoring work; JSON boundary validation is still
-limited to the current one-program experiment.
+At `a2b72a9`, `tellyq/domain/` contains immutable values, backend/store/clock
+protocols and pure evidence policy. `tellyq/state.py` validates version-1 queue and
+legacy session JSON, and `tellyq/cast_messages.py` normalizes unknown Cast input
+without importing PyChromecast. Typed wire records, Ruff/ty/pytest, the uv lock
+and packaging/CI checks were also in place. M1's second wave has since merged:
+`PlaybackApplication`, a Cast adapter, a revision-checked JSON snapshot store,
+versioned reports and correlated receiver-idle evidence now connect those
+boundaries to the controller. Actual `main` at `71a3c39` passed 351 offline tests,
+packaging/install checks and macOS/Linux CI. The bounded live start/status/stop
+regression also passed; M1 is accepted at that commit. Unknown ad state still
+limits strict receiver playback proof, as recorded separately from visual evidence.
+See the [acceptance record](M1-ACCEPTANCE.md).
+
+Milo/MCP, Chirp, a persistent runner, SQLite and a `src/` layout are future work;
+none is required to finish the current one-program core.
 
 ## Design decision
 
@@ -45,23 +57,27 @@ the boundary; use typed values within the application.
 
 | Contract | Meaning / required information |
 | --- | --- |
-| `ContentRef` | Provider plus opaque provider content ID, content kind and optional display metadata. A series or search result is not an exact episode. |
-| `PlaybackTarget` | Stable device identity and chosen adapter/route. Names are presentation; network addresses are local configuration. |
-| `PlaybackCapabilities` | Per-route support for exact launch, pause/resume, stop, identity, progress, completion and display/power evidence, with verified/unsupported/unknown status and provenance. |
-| `PlaybackRequest` | Content, target, queue item, request ID, attempt ID and applicable policy. Request IDs support deduplication. |
-| `CommandReceipt` | Accepted/rejected/unknown, timestamps and structured error. Acceptance is independent of observed playback. |
-| `PlaybackObservation` | Provider/device/session identity, observed fields, source, time, sequence/connection generation and freshness. Missing fields remain unknown. |
-| `SessionSnapshot` | Queue position, execution state, latest evidence and pending action. Safe to share with readers. |
-| `DisplayEvidence` | Separate timestamped user confirmation or verified display signal. A historical visual confirmation never proves current TV power/input. |
+| `ContentRef` | Provider plus opaque content ID, kind and optional title. A series or search result is not an exact episode. |
+| `PlaybackTarget` | Stable device identity and chosen adapter route. Names are presentation; network addresses remain local configuration. |
+| `PlaybackCapabilities` | Per-route exact launch, stop, identity, progress, completion and display support, with verified/unsupported/unknown status and dated provenance. Pause/resume and power controls are future additions. |
+| `PlaybackRequest` | Content, target, queue item, request ID and attempt ID. IDs correlate effects; they do not guarantee remote deduplication. |
+| `PlaybackScope` | An explicitly owned session, connection generation and monotonic start boundary. A command receipt alone cannot establish it. |
+| `CommandReceipt` | Accepted/rejected/unknown, timestamps and structured error, independent of observed playback. |
+| `PlaybackObservation` | Target, content/session identity, fields, source, UTC time, sequence and connection-local monotonic time. Missing fields remain unknown. |
+| `SessionSnapshot` | One scoped attempt, revision, receipt, latest observations, evidence, stop intent and ownership state. Multi-item queue execution is later work. |
+| `DisplayEvidence` | Separate timestamped user confirmation or verified display signal. Historical confirmation never proves current TV power/input. |
 
-Initial ports:
+The first three ports are defined in `tellyq/domain/ports.py` and used by the
+merged application, Cast adapter and snapshot store:
 
 - `PlaybackBackend`: describe capabilities, start an exact request, obtain
   observations and stop an owned session. Pause/seek use separate supported
   capabilities rather than success-shaped no-ops. Library-specific objects stay
   inside the adapter; YouTube content parsing is not a shared domain utility.
-- `SessionStore`: load and atomically save versioned queue/session/attempt state
-  with revision checks. Also persist command intent and outcome for recovery.
+- `SessionStore`: load and atomically compare/save an attempt snapshot using
+  revision checks. Wire schemas and process-restart recovery belong to the store
+  adapter; persisted monotonic evidence must not become fresh after restart.
+  A durable command-intent journal and multi-item recovery belong to M2.
 - `Clock`: UTC timestamps for records and monotonic deadlines for live waits.
   Persisted monotonic values are not comparable across host restarts.
 - `Catalog` / `ContentResolver`: add at M6 when there is a real catalog consumer;

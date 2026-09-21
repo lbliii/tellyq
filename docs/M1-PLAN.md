@@ -1,132 +1,147 @@
 # M1 execution plan: maintainable playback core
 
-Baseline: `main` at `2f0e99b`, 2026-09-21. The first YouTube playback milestone
-passed. Repository tooling is in place; its macOS and Linux CI jobs passed.
-The current suite has 23 tests. M1 finishes the core boundaries before M2 adds
-continuous monitoring and automatic queue advancement.
+Updated 2026-09-21. Foundations and second-wave code are merged into `main` at
+`71a3c39`. This wave started from `a2b72a9`. The original YouTube playback proof is M0. M1 finishes the core
+boundaries and stop verification before M2 adds continuous monitoring and queue
+advancement. Its [acceptance record](M1-ACCEPTANCE.md) tracks separate source, CI,
+artifact and hardware gates. **M1 passed at `71a3c39`**, including the fresh
+bounded hardware regression; natural endings and advancement remain M2 work.
 
 ## Delivery strategy
 
-Run three independent workstreams in isolated Git worktrees. Each branches from
-the same `main` commit, passes checks against that baseline, and opens its own PR
-with **base `main`**. No stacked PRs, cross-branch imports or cherry-picking another
-agent's unfinished work. Each agent owns its listed files and adds its own tests.
+Each agent works in an isolated worktree on a branch from the same `main` commit
+and opens an independent PR with **base `main`**. No stacked PRs or imports from
+another agent's unmerged branch. Independent branches prevent shared edits, but
+combined review and testing still resolve semantic integration issues.
 
-The coordinator owns this plan and shared project configuration. Do not change
-dependencies, move the entire package into `src/`, or edit shared documentation
-in parallel. Source-layout migration can follow functional boundaries later.
-Use stream-specific design notes so documentation changes also remain independent.
+The coordinator owns combined verification and shared project configuration.
+Do not add dependencies, move the package into `src/`, or add a persistent runner
+in this wave. The acceptance agent owns shared documentation; implementation
+agents keep their design notes in separate files. No task controls the TV unless
+hardware work is explicitly requested.
 
-Separate branches avoid accidental shared edits; they do not eliminate semantic
-integration work. The first wave deliberately ships components that are useful
-and testable on today's `main`. A second wave wires the new contracts into the
-controller only after the component PRs have been reviewed and integrated. Every
-second-wave PR also starts from then-current `main` and targets `main`.
+## Wave 1: merged foundations
 
-## Wave 1: parallel foundations
+The first wave branched from `2f0e99b`, where 23 baseline tests passed. Its contracts
+were deliberately usable without changing the existing controller all at once.
 
-| Stream | Branch / ownership | Tasks | Acceptance |
+| Stream | Merged PR / source | Delivered boundaries | Independent validation |
 | --- | --- | --- | --- |
-| A: Domain contracts and evidence policy | `codex/m1-domain`; new `tellyq/domain/`, `tests/domain/`, `docs/m1/domain.md` | A1 frozen/slotted content, target, request, receipt, observation, capability, error and snapshot values; A2 minimal backend/store/clock protocols with test doubles; A3 pure evidence transitions; A4 deterministic replay and dependency-isolation tests | Pure core imports without Cast/Milo/Chirp installed; no clocks, sockets or disk inside policy; accepted commands cannot manufacture playback; stale, duplicate, reordered or replaced-session events cannot confirm progress/completion |
-| B: Persistence and boundary validation | `codex/m1-storage`; `tellyq/state.py`, new `tellyq/clock.py`, `tellyq/programs.py`, `tests/test_state.py`, `docs/m1/storage.md` | B1 validate every required field of existing queue/session JSON; B2 explicit version/compatibility and useful errors; B3 preserve atomic writes and exclusive process ownership; B4 remove Cast imports from persistence and extract the default program | Existing version-1 queues remain readable; malformed and future-version records fail before device I/O; interrupted writes preserve old data and remove temporary files; stored state stays private; persistence imports without PyChromecast |
-| C: Cast normalization and replay fixtures | `codex/m1-cast`; `tellyq/cast.py`, `tellyq/models.py` only for observation typing, new `tellyq/cast_messages.py`, `tests/test_cast_messages.py`, `tests/fixtures/cast/`, `docs/m1/cast.md`, and `MANIFEST.in` for fixture inclusion only | C1 parse unknown wire messages defensively; C2 preserve absent/invalid fields as unknown, including ad state; C3 decouple normalization from PyChromecast and callback ownership; C4 sanitized synthetic replay fixtures and callback tests | Malformed messages cannot crash the observer; bools/non-finite numbers do not become valid positions; empty statuses cannot reuse old metadata; callbacks transfer detached snapshots; parser imports without PyChromecast; fixtures are labeled synthetic and ship in the source archive |
+| A: Domain | [#7](https://github.com/lbliii/tellyq/pull/7), `41a55aa`; `tellyq/domain/`, `tests/domain/`, [design](m1/domain.md) | Frozen/slotted values, backend/store/clock ports, pure correlated evidence policy and dependency isolation | 78 tests; Ruff/ty; preflight; source and installed core imports without Cast; macOS/Linux CI |
+| B: Persistence | [#6](https://github.com/lbliii/tellyq/pull/6), `a94fd40`; state/clock/program modules, [design](m1/storage.md) | Validated version-1 queue and legacy sessions, explicit future-version errors, atomic private writes, process ownership, extracted program defaults | 140 tests; Ruff/ty; preflight; compatibility and failure injection; macOS/Linux CI |
+| C: Cast normalization | [#5](https://github.com/lbliii/tellyq/pull/5), `62d3e00`; Cast parser/observer, synthetic fixtures, [design](m1/cast.md) | Detached defensive observations, unknown fields/ad state preserved, offline wire replay, parser imports without Cast | 79 tests; Ruff/ty; preflight; fixture source-archive inclusion; macOS/Linux CI |
 
-All three streams preserve the current CLI vocabulary and existing tests. New
-core values do not replace the current wire dictionaries in this wave. Storage
-keeps the public `read/save/make_queue/load_queue/command_lock` entry points.
-Cast keeps `media_observation`, `Observer`, `Connection`, `connect` and existing
-exports compatible, apart from correcting invented values to explicit unknowns.
+The [planning PR #4](https://github.com/lbliii/tellyq/pull/4) is also merged.
+Coordinator review resolved an expired progress anchor, a session-bootstrap port
+dependency cycle, overflowing JSON numbers and malformed receiver messages being
+mistaken for app exit. Those foundation changes did not yet connect the controller
+to every new contract; the second wave below completed that integration.
 
-### Shared boundary decisions
+A temporary combination passed 251 tests and full packaging checks. After merge,
+`main` at `a2b72a9` also passed `uv run --locked poe ci`: **251 tests**, **91.2%**
+branch-inclusive coverage, Ruff, formatting, ty 0.0.82, source/wheel builds and
+isolated installation. The supported runtime was Python 3.14.0 with the GIL.
+
+A separately requested live regression passed visible start and two status reads
+without restarting Bob Ross. Stop visibly returned to the Chromecast home screen,
+but the parser rejected idle receiver replies without `applications`, so the
+report was `unconfirmed` and the queue still said `playing`. This is a software
+verification/persistence gap; the expected visible stop is app exit, not pause.
+
+## Wave 2: independently delivered workstreams
+
+| Task | Branch / owned files | Required outcome |
+| --- | --- | --- |
+| D2/D3/D4: Application and contract integration | [Merged PR #9](https://github.com/lbliii/tellyq/pull/9), `codex/m1-application`; application/controller/adapters, JSON report contracts and associated offline tests; `docs/m1/application.md` | Inject backend/store/clock, use domain policy with fresh owned scopes, preserve legacy state and CLI names, version report output, exercise the same fake/Cast backend contracts and application scenarios |
+| S1: Receiver idle/stop evidence | [Merged PR #8](https://github.com/lbliii/tellyq/pull/8), `codex/m1-stop-evidence`; Cast parser/observer and associated tests/fixtures; `docs/m1/stop-evidence.md` | Recognize a justified, fresh correlated idle reply while refusing malformed, partial or stale replies; preserve unknown fields and prevent false stop confirmation |
+| E1: Acceptance and documentation | `codex/m1-acceptance`; README and shared docs | Correct stale foundation status, record the failed machine-stop checkpoint honestly, review contracts and keep commit-specific acceptance gates and remaining limits visible |
+| E2: Combined review | Coordinator; isolated integration worktree | Review independent PRs, resolve cross-boundary mismatches, run exact combined code through `poe ci` and installed artifacts, inspect macOS/Linux CI and record results |
+
+D2/D3 and the shared D4 contract suite stay with one application owner because
+those tests exercise the same changing interfaces. S1 stays independent of
+application policy. The coordinator integrates only completed code for verification;
+each PR continues to target `main` directly. No agent merges its own PR or marks
+M1 complete because its independent suite passes.
+
+The stop-evidence candidate at `a0f6219` independently passed `poe ci`: 301 tests,
+93.0% branch-inclusive coverage, lint/format/types, build and isolated install.
+Its [macOS/Linux CI](https://github.com/lbliii/tellyq/actions/runs/35619797156) also passed.
+[PR #8](https://github.com/lbliii/tellyq/pull/8) was independent of the application
+candidate. The application candidate at `92bea46` also passed `poe ci`: 301 tests, 90.6%
+branch-inclusive coverage and all build/install checks.
+
+The coordinator combined exact stop/application commits `a0f6219` + `92bea46`
+without conflicts on `a2b72a9`. Full `poe ci` passed **351 tests** with **91.8%**
+branch-inclusive coverage, Ruff/format/ty, source/wheel builds and isolated
+install/CLI smoke. Both code PRs passed macOS and Ubuntu CI;
+[PR #9 run](https://github.com/lbliii/tellyq/actions/runs/35620484798). The combined
+installed wheel also imported the core without Cast/Milo/Chirp or socket/runtime
+side effects.
+
+PR #8 merged at `110cf52`; PR #9 merged at `71a3c39`. The coordinator pulled actual
+`main` at `71a3c39` and reran full `poe ci`: **351 tests**, **91.8%** coverage and
+all build/install checks passed. Its
+[macOS/Linux CI run](https://github.com/lbliii/tellyq/actions/runs/35620756804)
+also passed. The explicitly requested hardware rerun then passed on that commit:
+visible exact-title playback, two statuses without restart, machine-verified app
+exit, user-confirmed Chromecast home screen and persisted stopped state. Ad state
+remained unknown, so strict playback proof stayed unconfirmed rather than
+inventing inactive-ad evidence. M1 is accepted at `71a3c39`.
+
+## Decisions that integration must preserve
 
 - Content IDs are opaque and provider-specific. The domain does not parse YouTube
-  URLs or contain the Bob Ross ID. Cast retains its current example constant until
-  the integration PR can consume the extracted default program.
-- An observation belongs to a target, content/session and connection generation;
-  sequence and monotonic time order observations only within that generation.
-  UTC timestamps describe records. A `Clock` supplies `utcnow() -> datetime` and
-  `monotonic() -> float`; policy receives time as input.
-- Represent missing ad information as unknown. The Cast parser does not decide
-  playback success. Policy distinguishes command acceptance, observed playback,
-  natural completion, stop and historical visual confirmation.
-- Preserve version-1 queue compatibility. Reject unsupported future schema
-  versions explicitly. Never silently overwrite or pretend to migrate unknown
-  formats. A changed on-disk shape requires a documented migration in wave 2.
-- JSON boundaries accept unknown input and validate before returning typed values.
-  No blanket type ignores, unchecked TypedDict casts, fake success defaults, raw
-  exception messages containing wire payloads, or unexplained swallowed errors.
-- Test fixtures contain synthetic identities and protocol data only. Agents do
-  not read private runtime reports or send discovery/playback commands.
+  URLs or contain the Bob Ross ID. Use the extracted example program at the
+  application boundary.
+- Scope observations by stable target, content/session, connection generation,
+  sequence and a fresh monotonic start boundary. UTC timestamps describe records;
+  monotonic times from a prior process cannot become current evidence after restart.
+- Keep command receipts, observed playback and historical user confirmation
+  separate. Status never launches or resumes playback. Uncertain effects require
+  inspection, not an automatic repeated start.
+- Cast has no verified no-ad signal. Preserve active/unknown ad state. The domain
+  policy's stricter playback/completion proof cannot be made to pass by turning
+  missing ad fields into false. Any weaker identity/progress evidence needs its
+  own honest label and must not establish natural completion.
+- Receiver-app exit is stop evidence only with valid ownership, freshness and
+  correlation. Do not fabricate content-level `IDLE/CANCELED`. A missing field in
+  an arbitrary message is not proof that the receiver has no running app.
+- Keep version-1 queues and supported legacy sessions readable. Document changes
+  to the on-disk format and report schema; reject future/malformed versions before
+  device I/O. An uncertain stop must not preserve misleading `playing` state.
+- Validate unknown input before returning typed values. Do not use blanket type
+  ignores, success defaults or raw network exception payloads in public errors.
+- Fixtures use synthetic identifiers and state their provenance. Ordinary tests
+  block sockets/DNS and never discover or control a receiver.
 
-## Wave 2: integrate after the foundations land
+## Definition of done
 
-| Task | Work / owner | Exit evidence |
-| --- | --- | --- |
-| D1 | Coordinator: review each wave-1 PR, then test their combined changes in an integration worktree | Independent PR checks pass; disjoint ownership verified; full suite and package smoke pass together |
-| D2 | Application agent: adapt YouTube/Cast to `PlaybackBackend`, adapt validated JSON to the store contract, inject clock/store/backend into controller operations | Same application flow runs with a fake backend and the Cast adapter; core/storage imports contain no Cast dependency; default episode comes from configuration/example data |
-| D3 | Application agent: route fresh correlated observations through the pure policy, version command output and preserve CLI compatibility | CLI JSON contract tests; version-1 state migration/compatibility test; no duplicate start, false completion or stopping a replacement session |
-| D4 | Verification agent, after D2/D3 land: reusable backend contract and end-to-end offline replay suite | Identical contracts exercised by fake backend and Cast with mocked transport; partial/stale/duplicate/out-of-order/takeover/timeout/ad scenarios covered; imported core tested with optional frameworks unavailable |
-| E1 | Coordinator: final docs and M1 acceptance review | `uv run --locked poe ci` passes on macOS/Linux, package installation passes, roadmap records actual results and remaining hardware limitations |
+Each PR explains the concrete behavior change, validation and limits. Code changes
+run `uv run --locked poe check`; package/dependency changes also run preflight.
+The final combined tree runs `uv run --locked poe ci`, including installed-wheel
+behavior. Final PR heads need macOS/Linux CI; merged `main` needs its own check.
+The [acceptance record](M1-ACCEPTANCE.md) supplies the detailed replay, wire/state,
+isolation, stop and bounded hardware criteria.
 
-D2 and D3 share controller ownership and therefore form one integration PR rather
-than concurrent edits. D4 branches from `main` after that PR lands; it is not
-stacked against an unmerged branch. No stream marks M1 complete merely because
-its own component passes.
-
-Two mapping decisions are already explicit integration tasks. The Cast parser has
-no verified no-ad signal and therefore emits active/unknown, while the new policy
-requires explicitly inactive ads for progress/completion proof. Integration must
-establish a justified observation/capability rule or retain an honest unconfirmed
-result; it must not convert missing ad data to false to make a test pass. Likewise,
-the existing observed receiver-app exit must be represented as stop evidence
-without inventing a content-level IDLE/CANCELED message. Independently passing
-component suites do not resolve either mapping.
-
-## Definition of done and review
-
-Each PR describes the problem, behavior, validation and remaining limits. Run
-`uv run --locked poe check`; run preflight for package/dependency changes. Keep the
-baseline regressions or equivalent assertions. Re-run the combined suite after
-integration; passing separate branch suites does not establish compatibility.
-
-The completed milestone requires all of the roadmap's M1 acceptance criteria,
-including versioned CLI output, real/fake adapter contracts and no dependency on
-Cast in the core. A synthetic replay is not a new hardware result. Live lifecycle
-verification remains M2a, including natural endings, ads, pauses and buffering.
-No daemon, automatic advancement, MCP server, subscription-service experiment,
-UI, new dependency or free-threaded support claim is part of this first wave.
+After integration, the explicitly requested supervised start/status/status/stop
+regression verified visible behavior and machine stop independently. No natural
+ending is required for M1. M2a owns full lifecycle experiments with ads, pauses,
+buffering and natural endings; M2b owns automatic advancement. MCP, subscription
+adapters, UI, a daemon and free-threaded support claims are outside this wave.
 
 ## Progress ledger
 
-- [x] Identify the remaining M1 work and confirm the baseline CI result.
-- [x] Prepare independent worktrees from the same `main` commit.
-- [x] Dispatch all three agents and publish independent PRs targeting `main`.
-- [ ] A: domain contracts and policy PR reviewed and integrated.
-- [ ] B: persistence/validation PR reviewed and integrated.
-- [ ] C: Cast normalization PR reviewed and integrated.
-- [x] D1: combined foundation checks pass in a temporary worktree.
-- [ ] D2/D3: application integration and compatible versioned output land.
-- [ ] D4: adapter contract and end-to-end replay gates pass.
-- [ ] E1: M1 accepted; then schedule M2a hardware verification.
-
-### First-wave results, 2026-09-21
-
-| Stream | Review | Independent validation |
-| --- | --- | --- |
-| A: Domain | [Draft PR #7](https://github.com/lbliii/tellyq/pull/7), `41a55aa` | 78 tests; Ruff/ty; preflight; dependency-free core import from source and built wheel; macOS/Linux CI passed |
-| B: Persistence | [Draft PR #6](https://github.com/lbliii/tellyq/pull/6), `a94fd40` | 140 tests; Ruff/ty; preflight; legacy state compatibility and failure injection; macOS/Linux CI passed |
-| C: Cast | [Draft PR #5](https://github.com/lbliii/tellyq/pull/5), `62d3e00` | 79 tests; Ruff/ty; preflight; synthetic fixtures included in source archive; macOS/Linux CI passed |
-
-All three PRs use `main` as their base and modify disjoint owned files. The
-original 23 tests remain unchanged. Coordinator review resolved an expired
-progress-anchor case, a backend session-bootstrap dependency cycle, overflowing
-JSON numbers and malformed receiver messages masquerading as an app exit.
-
-A temporary combination of the three exact commits merged without conflicts.
-`uv run --locked poe ci` passed locally: **251 tests**, Ruff, formatting, ty,
-source/wheel build and isolated install/CLI smoke. This checks combined component
-compatibility; it is not controller integration or new hardware evidence.
-
-The PRs are open for review and have not been merged into `main`. M1 remains in
-progress until D2/D3, D4 and E1 pass. The planning changes themselves are in
-[PR #4](https://github.com/lbliii/tellyq/pull/4).
+- [x] M0 playback connection and repository quality tooling established.
+- [x] Domain, persistence and Cast foundation PRs reviewed and merged into `main`.
+- [x] Combined foundation checks and actual merged-main checks passed.
+- [x] Live foundation regression recorded, including the failed stop-verification gate.
+- [x] Dispatch independent second-wave application, stop-evidence and acceptance agents.
+- [x] D2/D3: controller integration, state compatibility and versioned report candidates reviewed.
+- [x] D4: shared fake/Cast contracts and end-to-end offline scenarios pass together.
+- [x] S1: conservative idle/stop evidence and persistence fix pass offline regression tests.
+- [x] E2 local: exact combined code, source/wheel artifacts and isolated install pass.
+- [x] E2 platform: both final code PR heads pass macOS/Linux CI; installed core imports without Cast.
+- [x] Merge both code PRs; full local and macOS/Linux CI checks pass on actual `main` at `71a3c39`.
+- [x] Run the explicitly requested hardware regression on merged `main` at `71a3c39`.
+- [x] E1: record the accepted commit `71a3c39` and close M1; M2a is next.
+- [ ] Publish this updated acceptance record by merging [documentation PR #10](https://github.com/lbliii/tellyq/pull/10).
