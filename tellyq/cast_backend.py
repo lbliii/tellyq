@@ -61,11 +61,14 @@ class CastBackend:
         target: PlaybackTarget,
         clock: Clock,
         seconds: float = 30,
+        *,
+        read_only: bool = False,
     ) -> None:
         self.transport = transport
         self.target = target
         self.clock = clock
         self.seconds = seconds
+        self._read_only = read_only
         self.generation = str(uuid4())
         self.raw_observations: list[Observation] = []
         self._sequence = 0
@@ -78,6 +81,13 @@ class CastBackend:
     def _target(self, target: PlaybackTarget) -> None:
         if target != self.target:
             raise ValueError("The backend is bound to a different target.")
+
+    @property
+    def read_only(self) -> bool:
+        return self._read_only
+
+    def _allows_effects(self) -> bool:
+        return not self.read_only
 
     def capabilities(self, target: PlaybackTarget) -> PlaybackCapabilities:
         self._target(target)
@@ -98,6 +108,8 @@ class CastBackend:
 
     def start(self, request: PlaybackRequest) -> CommandReceipt:
         self._target(request.target)
+        if not self._allows_effects():
+            return self._receipt(request, CommandAction.START, CommandOutcome.REJECTED)
         if request.content.provider != "youtube":
             return self._receipt(request, CommandAction.START, CommandOutcome.REJECTED)
         self._window = self.seconds
@@ -116,6 +128,8 @@ class CastBackend:
 
     def stop(self, scope: PlaybackScope) -> CommandReceipt:
         self._target(scope.request.target)
+        if not self._allows_effects():
+            return self._receipt(scope.request, CommandAction.STOP, CommandOutcome.REJECTED)
         receiver = self._receiver
         now = self.clock.monotonic()
         if (
@@ -156,7 +170,10 @@ class CastBackend:
         self._target(target)
         raw = self.transport.observe(self._window)
         self._window = 6
-        self.raw_observations.extend(event.copy() for event in raw)
+        if self.read_only:
+            self.raw_observations = [event.copy() for event in raw]
+        else:
+            self.raw_observations.extend(event.copy() for event in raw)
         result: list[PlaybackObservation] = []
         for event in raw:
             instant = event.get("monotonic")
@@ -191,8 +208,25 @@ class CastBackend:
             observation = self._translate(base, event)
             if observation is not None:
                 result.append(observation)
-                self._identity_history.append(observation)
+                if not self.read_only:
+                    self._identity_history.append(observation)
         return tuple(result)
+
+    def observe_window(
+        self, target: PlaybackTarget, seconds: float
+    ) -> tuple[PlaybackObservation, ...]:
+        """Observe a short diagnostic window without retaining effect ownership history."""
+        if not self.read_only:
+            raise ValueError("Bounded capture requires an observation-only backend.")
+        if isinstance(seconds, bool) or not isfinite(seconds) or not 0 < seconds <= 2:
+            raise ValueError("Capture windows must be positive and at most two seconds.")
+        self._window = seconds
+        return self.observe(target)
+
+    def drain_raw_observations(self) -> list[Observation]:
+        """Transfer normalized wire records; these are not original protocol frames."""
+        result, self.raw_observations = self.raw_observations, []
+        return result
 
     def _translate(
         self, base: PlaybackObservation, event: Observation
@@ -295,11 +329,16 @@ def open_backend(
     target: PlaybackTarget,
     clock: Clock,
     seconds: float,
+    *,
+    read_only: bool = False,
 ) -> Iterator[tuple[CastBackend, Device]]:
     from .cast import connect
 
     with connect(target.device_id) as (connection, device):
-        yield CastBackend(_Transport(connection), target, clock, seconds), device
+        yield (
+            CastBackend(_Transport(connection), target, clock, seconds, read_only=read_only),
+            device,
+        )
 
 
 def discover_devices() -> list[Device]:
