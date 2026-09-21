@@ -366,11 +366,50 @@ class IPCRequest(TypedDict):
     timeout: NotRequired[float]
 
 
+class IPCHandoffEvidence(TypedDict):
+    sequence: int
+    age_seconds: float | None
+    since_terminal_seconds: float | None
+    sequence_delta: int | None
+    observation_delta_seconds: float | None
+    terminal_sequence: int | None
+    terminal_position: float | None
+    state: str
+    idle_reason: str | None
+    position: float | None
+    ad_active: bool | None
+    provider_phase: str | None
+    identity_update: str
+    session_active: bool | None
+    connection_reset: bool
+    target_matches: bool
+    connection_matches: bool
+    content_matches: bool | None
+    session_matches: bool | None
+    application_matches: bool | None
+    media_matches: bool | None
+
+
+class IPCHandoffVeto(TypedDict):
+    reason: str
+    evidence: IPCHandoffEvidence
+
+
+class IPCHandoffDiagnostic(TypedDict):
+    stage: str
+    disposition: str
+    reason: str
+    evidence: IPCHandoffEvidence | None
+    first_veto: IPCHandoffVeto | None
+    queue_reason: str | None
+
+
 class IPCTaskView(TypedDict):
     """Explicit read-only projections; nested values are JSON, never hydrated objects."""
 
     playback: dict[str, IPCValue] | None
     queue: dict[str, IPCValue] | None
+    handoff: NotRequired[IPCHandoffDiagnostic | None]
 
 
 class IPCTicket(TypedDict):

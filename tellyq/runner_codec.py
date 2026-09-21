@@ -6,10 +6,13 @@ from math import isfinite
 from typing import Literal, cast
 
 from .domain.values import CommandAction, ContentKind, ContentRef, PlaybackRequest, PlaybackTarget
+from .handoff import HandoffDiagnostic, HandoffEvidence
 from .models import (
     IPCAction,
     IPCCode,
     IPCCommand,
+    IPCHandoffDiagnostic,
+    IPCHandoffEvidence,
     IPCPlaybackRequest,
     IPCRequest,
     IPCResponse,
@@ -204,6 +207,48 @@ def fingerprint(command: RunnerCommand) -> str:
     return json.dumps(wire_command(command), sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+def _wire_handoff_evidence(evidence: HandoffEvidence) -> IPCHandoffEvidence:
+    return {
+        "sequence": evidence.sequence,
+        "age_seconds": evidence.age_seconds,
+        "since_terminal_seconds": evidence.since_terminal_seconds,
+        "sequence_delta": evidence.sequence_delta,
+        "observation_delta_seconds": evidence.observation_delta_seconds,
+        "terminal_sequence": evidence.terminal_sequence,
+        "terminal_position": evidence.terminal_position,
+        "state": evidence.state.value,
+        "idle_reason": evidence.idle_reason.value if evidence.idle_reason else None,
+        "position": evidence.position,
+        "ad_active": evidence.ad_active,
+        "provider_phase": evidence.provider_phase.value if evidence.provider_phase else None,
+        "identity_update": evidence.identity_update.value,
+        "session_active": evidence.session_active,
+        "connection_reset": evidence.connection_reset,
+        "target_matches": evidence.target_matches,
+        "connection_matches": evidence.connection_matches,
+        "content_matches": evidence.content_matches,
+        "session_matches": evidence.session_matches,
+        "application_matches": evidence.application_matches,
+        "media_matches": evidence.media_matches,
+    }
+
+
+def _wire_handoff(diagnostic: HandoffDiagnostic) -> IPCHandoffDiagnostic:
+    return {
+        "stage": diagnostic.stage.value,
+        "disposition": diagnostic.disposition.value,
+        "reason": diagnostic.reason.value,
+        "queue_reason": diagnostic.queue_reason.value if diagnostic.queue_reason else None,
+        "evidence": _wire_handoff_evidence(diagnostic.evidence) if diagnostic.evidence else None,
+        "first_veto": {
+            "reason": diagnostic.first_veto.reason.value,
+            "evidence": _wire_handoff_evidence(diagnostic.first_veto.evidence),
+        }
+        if diagnostic.first_veto
+        else None,
+    }
+
+
 def wire_view(view: TaskView) -> IPCTaskView:
     playback: dict[str, IPCValue] | None = None
     if (sample := view.playback) is not None:
@@ -290,7 +335,11 @@ def wire_view(view: TaskView) -> IPCTaskView:
                 for item in selected
             ],
         }
-    return {"playback": playback, "queue": queue}
+    return {
+        "playback": playback,
+        "queue": queue,
+        "handoff": _wire_handoff(view.handoff) if view.handoff else None,
+    }
 
 
 def wire_ticket(ticket: TicketSnapshot) -> IPCTicket:
@@ -382,7 +431,9 @@ def _failure(value: object) -> None:
 
 
 def _view(value: object) -> None:
-    fields = _object(value, {"playback", "queue"})
+    fields = _object(value, {"playback", "queue"}, {"handoff"})
+    if fields.get("handoff") is not None and not isinstance(fields["handoff"], dict):
+        raise IPCProtocolError("Invalid handoff projection.")
     for name in ("playback", "queue"):
         if fields[name] is not None and not isinstance(fields[name], dict):
             raise IPCProtocolError("Invalid read-model projection.")
