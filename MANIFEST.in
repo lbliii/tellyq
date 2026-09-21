@@ -6,6 +6,7 @@ recursive-include scripts *.py
 recursive-include tests *.py
 recursive-include tests/fixtures/cast *.json *.md
 recursive-include tests/fixtures/lifecycle *.jsonl *.md
+recursive-include tests/fixtures/handoff *.jsonl *.md
 include tellyq/py.typed
 prune runtime
 prune logs
