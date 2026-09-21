@@ -33,9 +33,12 @@ from the finite, source-qualified ordinary-content state.
 The ordinary/ad distinction follows the reviewed implementation. The initial
 provider diagnostic did not capture code 2 or any 108x code. The subsequent
 completion checkpoint captured code 2 during a software-verified and user-visible
-pause, followed by a verified and visible resume. No 108x code has been observed
-in these runs; synthetic ad coverage does not replace live validation. Unknown
-codes, including observed -1 and 5, retain unknown meaning. See the
+pause, followed by a verified and visible resume. A later run captured five
+code-1081 samples after the requested program ended and different content appeared;
+the adapter reported active ad context and retained the original completion.
+The user confirmed seeing an ad or another video. Other ad-family codes and
+mid-program ad transitions remain unvalidated live. Unknown codes, including
+observed -1 and 5, retain unknown meaning. See the
 [checkpoint ledger](M2A-CHECKPOINT.md) for commit-specific results.
 
 ## Identity and ordered history
