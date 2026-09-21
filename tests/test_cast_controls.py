@@ -10,7 +10,10 @@ from pychromecast.controllers.receiver import CastStatus
 from tellyq.cast import MEDIA, Connection
 from tellyq.domain.values import (
     CommandAction,
+    CommandOutcome,
     ContentRef,
+    ControlReason,
+    ControlStage,
     PlaybackRequest,
     PlaybackScope,
     PlaybackTarget,
@@ -63,55 +66,146 @@ def control():
 
 def test_transport_pins_media_application_and_destination(control):
     connection, scope, sent = control
-    assert connection.control(scope, "17", CommandAction.PAUSE) is True
+    assert connection.control(scope, "17", CommandAction.PAUSE).outcome == CommandOutcome.ACCEPTED
     assert sent == [
         ("transport-a", MEDIA, {"type": "PAUSE", "sessionId": "app-session", "mediaSessionId": 17})
     ]
     connection.cast.media_controller.status.player_state = "PAUSED"
-    assert connection.control(scope, "17", CommandAction.RESUME) is True
+    assert connection.control(scope, "17", CommandAction.RESUME).outcome == CommandOutcome.ACCEPTED
     assert sent[-1][2]["type"] == "PLAY"
 
 
 @pytest.mark.parametrize(
-    "field,value",
+    "field,value,reason",
     [
-        ("media_session_id", 18),
-        ("content_id", "video-b"),
-        ("supported_media_commands", 0),
-        ("player_state", "IDLE"),
+        ("media_session_id", 18, ControlReason.IDENTITY_CHANGED),
+        ("content_id", "video-b", ControlReason.IDENTITY_CHANGED),
+        ("supported_media_commands", 0, ControlReason.CAPABILITY_UNAVAILABLE),
+        ("player_state", "IDLE", ControlReason.STATE_MISMATCH),
     ],
 )
-def test_changed_cached_media_refuses_before_send(control, field, value):
+def test_changed_cached_media_refuses_before_send(control, field, value, reason):
     connection, scope, sent = control
     setattr(connection.cast.media_controller.status, field, value)
-    assert connection.control(scope, "17", CommandAction.PAUSE) is False
+    response = connection.control(scope, "17", CommandAction.PAUSE)
+    assert response.outcome == CommandOutcome.REJECTED
+    assert response.diagnostic.stage == ControlStage.TRANSPORT_GUARD
+    assert response.diagnostic.reason == reason
     assert sent == []
 
 
 @pytest.mark.parametrize(
-    "reply,result",
+    "reply,result,stage,reason",
     [
-        ({"type": "INVALID_REQUEST"}, False),
-        ({"type": "INVALID_PLAYER_STATE"}, False),
-        ({"type": "unrecognized"}, None),
-        (None, None),
+        (
+            {"type": "INVALID_REQUEST", "reason": "private wire data"},
+            CommandOutcome.REJECTED,
+            ControlStage.RECEIVER,
+            ControlReason.INVALID_REQUEST,
+        ),
+        (
+            {"type": "INVALID_PLAYER_STATE"},
+            CommandOutcome.REJECTED,
+            ControlStage.RECEIVER,
+            ControlReason.INVALID_PLAYER_STATE,
+        ),
+        (
+            {"type": "unrecognized-private"},
+            CommandOutcome.UNKNOWN,
+            ControlStage.TRANSPORT,
+            ControlReason.RESPONSE_UNKNOWN,
+        ),
+        (None, CommandOutcome.UNKNOWN, ControlStage.TRANSPORT, ControlReason.RESPONSE_UNKNOWN),
+        (
+            {"type": ["private"]},
+            CommandOutcome.UNKNOWN,
+            ControlStage.TRANSPORT,
+            ControlReason.RESPONSE_UNKNOWN,
+        ),
     ],
 )
-def test_transport_distinguishes_rejection_and_unknown_response(control, reply, result):
+def test_transport_distinguishes_rejection_and_unknown_response(
+    control, reply, result, stage, reason
+):
     connection, scope, _ = control
 
     def send(*_, callback_function):
         callback_function(True, reply)
 
     connection.cast.socket_client.send_message = send
-    assert connection.control(scope, "17", CommandAction.PAUSE) is result
+    response = connection.control(scope, "17", CommandAction.PAUSE)
+    assert response.outcome == result
+    assert response.diagnostic.stage == stage
+    assert response.diagnostic.reason == reason
+    assert "private" not in str(response)
 
 
-def test_transport_failure_is_not_swallowed(control):
+def test_transport_failure_is_unknown_with_safe_provenance(control):
     connection, scope, _ = control
     connection.cast.socket_client.send_message = Mock(side_effect=OSError("private"))
-    with pytest.raises(OSError):
-        connection.control(scope, "17", CommandAction.PAUSE)
+    response = connection.control(scope, "17", CommandAction.PAUSE)
+    assert response.outcome == CommandOutcome.UNKNOWN
+    assert response.diagnostic.stage == ControlStage.TRANSPORT
+    assert response.diagnostic.reason == ControlReason.TRANSPORT_EXCEPTION
+    assert "private" not in str(response)
+
+
+@pytest.mark.parametrize(
+    "failure,reason",
+    [("timeout", ControlReason.RESPONSE_TIMEOUT), ("not_sent", ControlReason.MESSAGE_NOT_SENT)],
+)
+def test_transport_completion_failures_remain_unknown(control, monkeypatch, failure, reason):
+    from pychromecast.error import RequestTimeout
+
+    connection, scope, _ = control
+    if failure == "timeout":
+        monkeypatch.setattr(
+            "tellyq.cast.WaitResponse.wait_response",
+            Mock(side_effect=RequestTimeout("private", 10)),
+        )
+    else:
+
+        def failed(*_, callback_function):
+            callback_function(False, {"type": "INVALID_REQUEST", "private": "secret"})
+
+        connection.cast.socket_client.send_message = failed
+    response = connection.control(scope, "17", CommandAction.PAUSE)
+    assert response.outcome == CommandOutcome.UNKNOWN
+    assert response.diagnostic.stage == ControlStage.TRANSPORT
+    assert response.diagnostic.reason == reason
+    assert "private" not in str(response) and "secret" not in str(response)
+
+
+@pytest.mark.parametrize(
+    "change,reason",
+    [
+        ("app", ControlReason.IDENTITY_CHANGED),
+        ("session", ControlReason.IDENTITY_CHANGED),
+        ("destination", ControlReason.DESTINATION_UNAVAILABLE),
+        ("receiver", ControlReason.OWNERSHIP_UNVERIFIED),
+        ("action", ControlReason.ACTION_UNSUPPORTED),
+    ],
+)
+def test_receiver_cache_guards_have_local_provenance(control, change, reason):
+    from dataclasses import replace
+
+    connection, scope, sent = control
+    action = CommandAction.PAUSE
+    if change == "app":
+        connection.cast.status = replace(connection.cast.status, app_id="private replacement")
+    elif change == "session":
+        connection.cast.status = replace(connection.cast.status, session_id="private replacement")
+    elif change == "destination":
+        connection.cast.status = replace(connection.cast.status, transport_id="")
+    elif change == "receiver":
+        connection.cast.status = None
+    else:
+        action = CommandAction.START
+    response = connection.control(scope, "17", action)
+    assert response.outcome == CommandOutcome.REJECTED
+    assert response.diagnostic.stage == ControlStage.TRANSPORT_GUARD
+    assert response.diagnostic.reason == reason
+    assert sent == [] and "private" not in str(response)
 
 
 def test_pinned_library_send_path_keeps_identity_during_callback_race(control):
@@ -168,5 +262,5 @@ def test_pinned_library_send_path_keeps_identity_during_callback_race(control):
 
     client.socket.sendall.side_effect = socket_write
     connection.cast.socket_client = client
-    assert connection.control(scope, "17", CommandAction.PAUSE) is True
+    assert connection.control(scope, "17", CommandAction.PAUSE).outcome == CommandOutcome.ACCEPTED
     assert client._request_callbacks == {}

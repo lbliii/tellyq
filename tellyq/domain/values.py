@@ -121,6 +121,7 @@ class ErrorCode(StrEnum):
     UNSUPPORTED_CAPABILITY = "unsupported_capability"
     SESSION_REPLACED = "session_replaced"
     COMMAND_OUTCOME_UNKNOWN = "command_outcome_unknown"
+    CONTROL_REJECTED = "control_rejected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +146,50 @@ class CommandOutcome(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ControlStage(StrEnum):
+    APPLICATION = "application"
+    BACKEND = "backend"
+    TRANSPORT_GUARD = "transport_guard"
+    TRANSPORT = "transport"
+    RECEIVER = "receiver"
+
+
+class ControlReason(StrEnum):
+    OWNERSHIP_UNVERIFIED = "ownership_unverified"
+    CONNECTION_CHANGED = "connection_changed"
+    IDENTITY_CHANGED = "identity_changed"
+    MEDIA_UNAVAILABLE = "media_unavailable"
+    STALE_OBSERVATION = "stale_observation"
+    STATE_MISMATCH = "state_mismatch"
+    CAPABILITY_UNAVAILABLE = "capability_unavailable"
+    READ_ONLY = "read_only"
+    ACTION_UNSUPPORTED = "action_unsupported"
+    DESTINATION_UNAVAILABLE = "destination_unavailable"
+    INVALID_MEDIA_ID = "invalid_media_id"
+    MEDIA_STATUS = "media_status"
+    INVALID_REQUEST = "invalid_request"
+    INVALID_PLAYER_STATE = "invalid_player_state"
+    RESPONSE_UNKNOWN = "response_unknown"
+    RESPONSE_TIMEOUT = "response_timeout"
+    MESSAGE_NOT_SENT = "message_not_sent"
+    TRANSPORT_EXCEPTION = "transport_exception"
+    LEGACY_RESULT = "legacy_result"
+
+
+@dataclass(frozen=True, slots=True)
+class ControlDiagnostic:
+    """Fixed provenance labels only; never wire data or exception messages."""
+
+    stage: ControlStage
+    reason: ControlReason
+
+
+@dataclass(frozen=True, slots=True)
+class ControlResponse:
+    outcome: CommandOutcome
+    diagnostic: ControlDiagnostic
+
+
 @dataclass(frozen=True, slots=True)
 class CommandReceipt:
     request_id: str
@@ -154,6 +199,7 @@ class CommandReceipt:
     recorded_at: datetime
     error: PlaybackError | None = None
     requested_at: datetime | None = None
+    diagnostic: ControlDiagnostic | None = None
 
     def __post_init__(self) -> None:
         _require_aware(self.recorded_at)
