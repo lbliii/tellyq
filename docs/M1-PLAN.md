@@ -73,6 +73,15 @@ than concurrent edits. D4 branches from `main` after that PR lands; it is not
 stacked against an unmerged branch. No stream marks M1 complete merely because
 its own component passes.
 
+Two mapping decisions are already explicit integration tasks. The Cast parser has
+no verified no-ad signal and therefore emits active/unknown, while the new policy
+requires explicitly inactive ads for progress/completion proof. Integration must
+establish a justified observation/capability rule or retain an honest unconfirmed
+result; it must not convert missing ad data to false to make a test pass. Likewise,
+the existing observed receiver-app exit must be represented as stop evidence
+without inventing a content-level IDLE/CANCELED message. Independently passing
+component suites do not resolve either mapping.
+
 ## Definition of done and review
 
 Each PR describes the problem, behavior, validation and remaining limits. Run
@@ -91,10 +100,33 @@ UI, new dependency or free-threaded support claim is part of this first wave.
 
 - [x] Identify the remaining M1 work and confirm the baseline CI result.
 - [x] Prepare independent worktrees from the same `main` commit.
+- [x] Dispatch all three agents and publish independent PRs targeting `main`.
 - [ ] A: domain contracts and policy PR reviewed and integrated.
 - [ ] B: persistence/validation PR reviewed and integrated.
 - [ ] C: Cast normalization PR reviewed and integrated.
-- [ ] D1: combined foundation checks pass.
+- [x] D1: combined foundation checks pass in a temporary worktree.
 - [ ] D2/D3: application integration and compatible versioned output land.
 - [ ] D4: adapter contract and end-to-end replay gates pass.
 - [ ] E1: M1 accepted; then schedule M2a hardware verification.
+
+### First-wave results, 2026-09-21
+
+| Stream | Review | Independent validation |
+| --- | --- | --- |
+| A: Domain | [Draft PR #7](https://github.com/lbliii/tellyq/pull/7), `41a55aa` | 78 tests; Ruff/ty; preflight; dependency-free core import from source and built wheel; macOS/Linux CI passed |
+| B: Persistence | [Draft PR #6](https://github.com/lbliii/tellyq/pull/6), `a94fd40` | 140 tests; Ruff/ty; preflight; legacy state compatibility and failure injection; macOS/Linux CI passed |
+| C: Cast | [Draft PR #5](https://github.com/lbliii/tellyq/pull/5), `62d3e00` | 79 tests; Ruff/ty; preflight; synthetic fixtures included in source archive; macOS/Linux CI passed |
+
+All three PRs use `main` as their base and modify disjoint owned files. The
+original 23 tests remain unchanged. Coordinator review resolved an expired
+progress-anchor case, a backend session-bootstrap dependency cycle, overflowing
+JSON numbers and malformed receiver messages masquerading as an app exit.
+
+A temporary combination of the three exact commits merged without conflicts.
+`uv run --locked poe ci` passed locally: **251 tests**, Ruff, formatting, ty,
+source/wheel build and isolated install/CLI smoke. This checks combined component
+compatibility; it is not controller integration or new hardware evidence.
+
+The PRs are open for review and have not been merged into `main`. M1 remains in
+progress until D2/D3, D4 and E1 pass. The planning changes themselves are in
+[PR #4](https://github.com/lbliii/tellyq/pull/4).
