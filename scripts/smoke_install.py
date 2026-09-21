@@ -1,0 +1,119 @@
+"""Check the built artifacts and install the wheel away from the source checkout."""
+
+import json
+import os
+import subprocess
+import sys
+import tarfile
+import tomllib
+import zipfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def run(*args: str, cwd: Path = ROOT) -> str:
+    try:
+        result = subprocess.run(
+            args, cwd=cwd, check=True, text=True, capture_output=True, timeout=120
+        )
+    except subprocess.CalledProcessError as exc:
+        print(exc.stderr, file=sys.stderr)
+        raise
+    return result.stdout
+
+
+def check_members(members: list[str]) -> None:
+    for member in members:
+        parts = Path(member).parts
+        if {"runtime", ".venv", "logs", ".git"}.intersection(parts):
+            raise RuntimeError(f"Private directory included in distribution: {member}")
+        if any(part.startswith(".env") or part.endswith(".log") for part in parts):
+            raise RuntimeError(f"Private file included in distribution: {member}")
+    if not any(member.endswith("tellyq/py.typed") for member in members):
+        raise RuntimeError("The distribution is missing its typing marker.")
+
+
+def main() -> None:
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    version = metadata["project"]["version"]
+    wheel = ROOT / "dist" / f"tellyq-{version}-py3-none-any.whl"
+    sdist = ROOT / "dist" / f"tellyq-{version}.tar.gz"
+    with zipfile.ZipFile(wheel) as archive:
+        check_members(archive.namelist())
+    with tarfile.open(sdist) as archive:
+        check_members(archive.getnames())
+
+    # A relative cache path must keep pointing at the checkout when cwd changes.
+    if cache := os.environ.get("UV_CACHE_DIR"):
+        os.environ["UV_CACHE_DIR"] = str(Path(cache).resolve())
+    with TemporaryDirectory(prefix="tellyq-install-") as directory:
+        work = Path(directory)
+        environment = work / "venv"
+        python = environment / "bin" / "python"
+        cli = environment / "bin" / "tellyq"
+        requirements = work / "requirements.txt"
+        run("uv", "export", "--locked", "--no-dev", "--no-emit-project", "-o", str(requirements))
+        run("uv", "venv", "--python", sys.executable, str(environment))
+        run(
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            "--require-hashes",
+            "--no-deps",
+            "-r",
+            str(requirements),
+        )
+        run("uv", "pip", "install", "--python", str(python), "--no-deps", str(wheel))
+        run("uv", "pip", "check", "--python", str(python))
+        run(
+            str(python),
+            "-I",
+            "-c",
+            """
+import sys
+from pathlib import Path
+
+def reject_network(event, args):
+    if event.startswith("socket."):
+        raise RuntimeError(f"Import attempted networking: {event}")
+
+sys.addaudithook(reject_network)
+import tellyq
+import tellyq.__main__
+import tellyq.cast
+import tellyq.controller
+import tellyq.evidence
+import tellyq.models
+import tellyq.state
+assert "site-packages" in str(tellyq.__file__)
+assert not Path("runtime").exists(), "Imports created runtime state"
+assert tellyq.state.RUNTIME == Path.cwd() / "runtime"
+""",
+            cwd=work,
+        )
+        help_output = run(str(cli), "--help", cwd=work)
+        if not all(
+            command in help_output for command in ("discover", "queue", "start", "status", "stop")
+        ):
+            raise RuntimeError("Installed CLI is missing a command.")
+        if (work / "runtime").exists():
+            raise RuntimeError("CLI help created runtime state.")
+        output = run(
+            str(cli), "queue", "--device", "00000000-0000-4000-8000-000000000001", cwd=work
+        )
+        report = json.loads(output)
+        if report["state"] != "queued" or report["commands"]:
+            raise RuntimeError(
+                "Installed queue command did not return a queue without device commands."
+            )
+        if not (work / "runtime" / "queue.json").is_file():
+            raise RuntimeError("Installed CLI did not save state under the working directory.")
+    print("Wheel/sdist contents, isolated imports, CLI help and local queue passed.")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,21 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: Ruff lint
+        entry: uv run --locked poe lint
+        language: system
+        types_or: [python, toml]
+        pass_filenames: false
+      - id: ruff-format
+        name: Ruff formatting
+        entry: uv run --locked poe format-check
+        language: system
+        types_or: [python, toml]
+        pass_filenames: false
+      - id: ty
+        name: ty type checking
+        entry: uv run --locked poe typecheck
+        language: system
+        types_or: [python, toml]
+        pass_filenames: false

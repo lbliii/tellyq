@@ -60,4 +60,13 @@ A public direct-media Cast test may help diagnose connectivity if YouTube fails,
 
 ## Current status
 
-Planning and repository setup only. The user's latest request was to create a fresh local repository and open a Codex project. No implementation, dependency installation, pairing, network discovery, or playback has happened yet.
+Implementation and live testing are now authorized. Python 3.14.0 and released
+PyChromecast 14.0.10 are installed in `.venv/`; discovery, queue, start, status,
+stop and a direct probe are implemented. Receiver telemetry confirmed the requested
+Bob Ross ID/title and advancing positions. The initial attempt ran while the
+Chromecast was not connected to TV HDMI, so it did not establish visible playback.
+After reconnecting HDMI, the user confirmed visible Bob Ross playback and automatic
+TV switching. Fresh receiver samples showed advancing position and software stop
+was verified by YouTube exiting. The first milestone passed; the queue is stopped.
+Full-episode completion and automatic queue advancement remain untested and out of
+this first milestone. See `IMPLEMENTATION.md` for outcomes and remaining work.

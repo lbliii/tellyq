@@ -13,9 +13,75 @@ Queue and start one real program on the living-room Chromecast through software 
 - Controller: a small local Python program using PyChromecast.
 - Interface: structured commands for queue, start, status, and stop. Add MCP after the playback connection works.
 
-This repository currently contains the plan and research handoff. No controller has been implemented, no devices have been discovered, and no TV playback has been tested.
+The first milestone passed on 2026-09-21. The user confirmed visible Bob Ross
+playback and automatic TV switching after connecting Chromecast HDMI. Receiver
+telemetry reported the exact episode ID/title and advancing position, and software
+stop was verified by the YouTube app exiting. Receiver playback remains separate
+from evidence that the TV is on and showing the program.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
+
+For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and
+[architecture direction](docs/ARCHITECTURE.md). They cover typed contracts,
+reliable queueing, Milo CLI/MCP, subscription-service experiments, Cueby's
+programming logic and an optional Chirp interface. These are planned milestones;
+the implemented behavior is described below.
+
+## Run locally
+
+Requires Python 3.14 on macOS/Linux, uv, and a reachable Chromecast on the same home network. Connect
+the Chromecast to TV HDMI and keep the Sonos Beam on HDMI ARC. The TV may need to
+be turned on and switched to the Chromecast input manually if HDMI-CEC is disabled.
+
+```sh
+uv sync --locked
+uv run --locked tellyq discover
+uv run --locked tellyq queue --device UUID_FROM_DISCOVER
+uv run --locked tellyq start
+uv run --locked tellyq status
+uv run --locked tellyq stop
+```
+
+`queue` only writes the local one-item queue. `start` plays it and observes for
+30 seconds, then exits while playback continues. `status` obtains fresh events
+without starting or resuming anything. `stop` exits the saved YouTube receiver
+session and checks that the app has exited. It refuses to stop a replacement
+session or known different content. An explicit `queue` permits a new attempt;
+accidental repeated `start` calls do not restart an active/uncertain attempt.
+
+All commands emit JSON. `commands[].returned` records the command result;
+`evidence.receiver_playback_confirmed` requires the requested content ID, PLAYING
+state, and two advancing positions from the same media session. It does **not**
+prove the TV is displaying the video. Observations retain unknown fields as null.
+Exit code 0 means the operation completed; inspect the evidence/state for its
+outcome. A timeout may leave playback unconfirmed, so inspect status before retrying.
+
+`probe --device UUID_FROM_DISCOVER` is the direct playback experiment that bypasses
+the persistent queue. Both `probe` and `start` accept `--seconds 5..120` to change
+the observation window. `status` and `stop` accept an explicit `--device`; otherwise
+they use the saved session, then the queue. Only one command may run at a time.
+
+Device identity, session information, queue state, diagnostics and timestamped run
+reports stay under ignored `runtime/` in the working directory. Run commands from
+the repository root to reuse its saved queue/session. Ordinary Python 3.14 threads run discovery
+and Cast communication; a synchronized queue transfers observation snapshots to
+the controller. This setup uses the GIL-enabled interpreter, not the free-threaded
+build. Runtime JSON includes the interpreter version and actual GIL status.
+
+## Development
+
+```sh
+uv run --locked poe check      # Ruff, formatting, ty, offline tests
+uv run --locked poe preflight  # Also build and verify an isolated wheel install
+```
+
+The lock includes development tools. Normal tests block network access and never
+control the TV. See [contributor guidance](CONTRIBUTING.md) for coverage, optional
+commit hooks, dependency changes and the macOS/Linux CI checks. For a sandbox-local
+uv cache, prefix uv commands with `UV_CACHE_DIR=runtime/uv-cache`.
+
+See [implementation work and verification](docs/IMPLEMENTATION.md). No automatic
+queue advancement or full-episode completion test has been performed.
 
 ## Longer-term direction
 

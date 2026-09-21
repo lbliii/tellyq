@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=80,<83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tellyq"
+version = "0.1.0"
+description = "Cueby's local TV playback controller"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = ["PyChromecast==14.0.10"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Typing :: Typed",
+]
+
+[project.scripts]
+tellyq = "tellyq.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["tellyq*"]
+
+[tool.setuptools.package-data]
+tellyq = ["py.typed"]
+
+[dependency-groups]
+dev = [
+    "build>=1.2,<2",
+    "poethepoet>=0.29,<1",
+    "prek>=0.2,<1",
+    "pytest>=9,<10",
+    "pytest-cov>=6,<8",
+    "pytest-timeout>=2.3,<3",
+    "ruff==0.15.12",
+    "setuptools>=80,<83",
+    "ty==0.0.34",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["runtime", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "C4", "PIE", "RUF", "T20", "ANN"]
+ignore = ["E501"] # Ruff's formatter owns wrapping.
+
+[tool.ruff.lint.per-file-ignores]
+"tellyq/__main__.py" = ["T201"] # The CLI owns JSON stdout.
+"tests/**" = ["ANN"] # Check test bodies; do not require annotations on every test method.
+"scripts/**" = ["T201"] # Development tools may report progress.
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = ["tellyq", "tests", "scripts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-config --strict-markers --import-mode=importlib -ra"
+filterwarnings = ["error"]
+timeout = 10
+
+[tool.coverage.run]
+branch = true
+source = ["tellyq"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 1
+
+[tool.poe.tasks]
+lint = "ruff check ."
+lint-fix = "ruff check . --fix"
+format = "ruff format ."
+format-check = "ruff format . --check"
+typecheck = "ty check --error-on-warning"
+test = "pytest"
+test-cov = "pytest --cov=tellyq --cov-report=term-missing --cov-report=xml"
+build = "python -m build --no-isolation"
+smoke = "python scripts/smoke_install.py"
+check = ["lint", "format-check", "typecheck", "test"]
+ci = ["lint", "format-check", "typecheck", "test-cov", "build", "smoke"]
+preflight = ["check", "build", "smoke"]

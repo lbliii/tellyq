@@ -1,6 +1,8 @@
 # Research handoff
 
-Checked 2026-09-21. These are documented capabilities and proposed approaches, not hardware-test results.
+Checked 2026-09-21. The references below describe researched capabilities; actual
+hardware results are recorded separately in `IMPLEMENTATION.md` and ignored
+`runtime/runs/`.
 
 ## First prototype
 
@@ -8,7 +10,10 @@ Checked 2026-09-21. These are documented capabilities and proposed approaches, n
 - [YouTube controller](https://github.com/home-assistant-libs/pychromecast/blob/master/pychromecast/controllers/youtube.py): exposes `play_video`, `add_to_queue`, and `play_next`; internally uses casttube. Do not treat a YouTube watch URL as a directly playable media file URL.
 - [YouTube example](https://github.com/home-assistant-libs/pychromecast/blob/master/examples/youtube_example.py): shows discovery by device name, handler registration, and playback by video ID.
 - [Open compatibility proposal, PR #1155](https://github.com/home-assistant-libs/pychromecast/pull/1155): reports a YouTube lounge API HTTP 400 problem and proposes setting Content-Length. Author reports a Nest Hub test; this is not validation on the user's Chromecast.
-- [Bob Ross — Autumn Fantasy](https://www.youtube.com/watch?v=FozIp7Va7dY): official-channel full episode, season 20, episode 7. Availability on the user's playback device remains to be tested.
+  Rechecked during implementation: still open. Released PyChromecast 14.0.10 worked
+  on this Chromecast without the proposal; retain it only as a diagnostic lead if
+  a future run actually exhibits the error.
+- [Bob Ross — Autumn Fantasy](https://www.youtube.com/watch?v=FozIp7Va7dY): official-channel full episode, season 20, episode 7. Exact-ID launch, visible playback, advancing position and stop were verified on the user's Chromecast on 2026-09-21; full-episode completion is still untested.
 
 ## Possible later components
 
@@ -26,3 +31,72 @@ Checked 2026-09-21. These are documented capabilities and proposed approaches, n
 ## Hardware distinction
 
 [ARC](https://www.samsung.com/sg/support/tv-audio-video/how-to-use-hdmi-arc-on-samsung-smart-tv/) carries TV audio back to Sonos. [CEC/Anynet+](https://www.samsung.com/sg/support/tv-audio-video/use-anynetplus-hdmi-cec-on-your-samsung-smart-tv/) carries device-control commands and is not exclusive to the ARC port. [libCEC](https://github.com/Pulse-Eight/libcec) is a possible later power/input-control component. It does not by itself provide cross-service title selection or episode-progress information.
+
+## Streaming control comparison, 2026-09-21
+
+**Finding:** common Cast hardware does not mean a common exact-title playback API.
+Google's [Cast architecture](https://developers.google.com/cast/docs/overview)
+distinguishes ordinary media receivers from applications with authentication and
+rights-management needs. Its [receiver example](https://developers.google.com/cast/codelabs/cast-receiver)
+shows service-specific content IDs being resolved through the receiver's own
+backend. A watch-page URL or receiver app ID is therefore not enough evidence that
+TellyQ can launch a subscription title.
+
+| Service | Documented route | What TellyQ actually knows | Planning decision |
+| --- | --- | --- | --- |
+| YouTube | PyChromecast YouTubeController with video ID | Start, identity, progress, visible playback and app-exit stop passed on this hardware; natural completion is untested | Continue here for queue/lifecycle engineering |
+| Netflix | Official mobile casting is restricted by device and plan | User reports Assistant can launch Netflix; no exact-title Python launch, state or completion test | First bounded subscription feasibility probe because of existing setup evidence |
+| Disney+ | Official Android/iOS app supports Chromecast casting | Consumer casting documented; independent software launch and telemetry unknown | Compare with Prime Video using the same capability checklist |
+| Prime Video | Official iOS/Android app supports Chromecast; Google TV devices can also run the app | Consumer casting documented; independent software launch and telemetry unknown | Compare with Disney+; no evidence yet that it is easier |
+| Apple TV app | Apple's Android app documents Cast playback | A consumer Cast route exists; independent Mac/Python title launch and telemetry unknown | Keep in comparison; do not assume the Apple TV app requires an Apple TV hardware box |
+
+Service sources, checked during planning:
+
+- [Netflix supported casting devices and plans](https://help.netflix.com/en/node/100131): lists older Chromecast models without a remote (third generation or earlier), Nest Hub and selected TV models; Standard/Premium plans are required. Confirm the actual receiver and account tier before testing. This describes the Netflix mobile app, not an open Python control API.
+- [Disney+ casting instructions](https://help.disneyplus.com/en-GB/article/disneyplus-en-uk-cast-airplay-tv): the official help article describes selecting content and a Chromecast in the Disney+ mobile app. The search index exposed the article text; direct page extraction was empty during this review. Recheck device/region-specific details before implementation.
+- [Amazon's Chromecast instructions](https://digprjsurvey.amazon.co.uk/csad/help/node/G7U9H58SPSH7ZV4V): describes casting from current iOS/Android Prime Video apps and using the native app on Chromecast with Google TV. The main Prime Video help endpoint was inaccessible to the research tool; this is Amazon's own help copy.
+- [Apple TV playback on Android](https://support.apple.com/en-euro/guide/tvapp-android/dev1a32599b3/web): documents selecting a Cast destination and stopping casting. Support in the app does not prove external automation access.
+
+### Device and transport routes
+
+- **Existing Chromecast/Cast:** lowest setup cost and the proven YouTube route.
+  Confirm generation before assuming it can run native Android apps or accept ADB.
+- **Android/Google TV remote and deep links:** a candidate only on compatible
+  hardware. [Home Assistant's Android TV Remote documentation](https://www.home-assistant.io/integrations/androidtv_remote/)
+  states that playback status is unavailable through that API and lists Netflix
+  command limitations. Opening a deep link can still land on a title page instead
+  of playing an exact episode; observe the actual outcome.
+- **Samsung native apps:** a separate device adapter, not the Chromecast protocol.
+  The living-room model remains unverified. Launch, pairing and observations need
+  their own experiment; the discovered desk monitor was not the living-room TV.
+- **Google Home/Assistant integration:** the user's working Assistant setup is a
+  lead. Google documents [script-editor text commands](https://developers.home.google.com/automations/schema/reference/entity/assistant/ok_google_command)
+  and separately [Android Home automation creation/execution](https://developers.home.google.com/apis/android/automation/build).
+  Neither document establishes that the desired Netflix command is exposed to this
+  local Python controller. Confirm access, auth and supported commands; do not
+  assume the script-editor action exists through the Android API. No synthetic
+  spoken commands are part of the proposed route.
+
+### Experiment record and selection rule
+
+Use one row per **service + device model + control route + account context**, with
+software versions and a last-tested date. For each capability record:
+
+`unknown | documented | verified | unsupported`, its evidence source, and any
+requirements. A service logo and a successful app launch never mark the row done.
+
+Test exact title/episode launch, receiver identity, state, advancing position,
+completion, stop, session takeover and restart. Record authentication/setup cost
+and whether user interaction is required for every launch or only initial setup.
+No credentials belong in the committed matrix.
+
+Prefer a route that provides exact software launch **and** sufficient observations
+to meet the requested autonomy. Verified launch/stop without completion can support
+assisted viewing; it does not qualify for unattended advancement. If all candidate
+routes fail a hard requirement, stop the probe and make the constraint explicit.
+
+**Recommendation, not a proven ease ranking:** YouTube first; a short Netflix probe
+next because of the already working Assistant setup; then select among all four
+subscription services using observed capability coverage and setup cost. An early
+device limitation may matter more than the service brand. See M4/M5 in
+[ROADMAP.md](ROADMAP.md).

@@ -1,0 +1,11 @@
+include README.md CONTRIBUTING.md CHANGELOG.md AGENTS.md
+include .python-version uv.lock
+recursive-include docs *.md
+recursive-include examples *.json
+recursive-include scripts *.py
+recursive-include tests *.py
+include tellyq/py.typed
+prune runtime
+prune logs
+prune .venv
+global-exclude *.py[cod] .DS_Store

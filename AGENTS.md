@@ -11,3 +11,11 @@ Read README.md and docs/MVP.md before implementing. docs/RESEARCH.md records res
 - Do not infer completion from nominal runtime; account for ads, pauses, and buffering.
 - Keep credentials, pairing material, local device addresses, and runtime logs out of Git. Use runtime/ for local state.
 - Do not expand repository setup into a live TV playback test unless that work is requested in the active task.
+
+## Development checks
+
+- Use Python 3.14 and the committed `uv.lock`; install with `uv sync --locked`.
+- Run `uv run --locked poe check` for code changes and `poe preflight` for packaging/dependency changes.
+- Keep package functions annotated and JSON contracts in `tellyq/models.py`; do not silence whole modules to pass ty or Ruff.
+- Normal pytest runs block sockets and DNS. Live receiver checks belong in explicitly requested hardware work, never CI.
+- See CONTRIBUTING.md for local hooks, coverage, packaging and dependency updates.
