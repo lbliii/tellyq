@@ -87,6 +87,7 @@ class PlaybackScope:
 class Support(StrEnum):
     UNKNOWN = "unknown"
     VERIFIED = "verified"
+    ADVERTISED = "advertised"
     UNSUPPORTED = "unsupported"
 
 
@@ -111,6 +112,8 @@ class PlaybackCapabilities:
     progress: CapabilityEvidence = CapabilityEvidence()
     completion: CapabilityEvidence = CapabilityEvidence()
     display: CapabilityEvidence = CapabilityEvidence()
+    pause: CapabilityEvidence = CapabilityEvidence()
+    resume: CapabilityEvidence = CapabilityEvidence()
 
 
 class ErrorCode(StrEnum):
@@ -132,6 +135,8 @@ class PlaybackError:
 class CommandAction(StrEnum):
     START = "start"
     STOP = "stop"
+    PAUSE = "pause"
+    RESUME = "resume"
 
 
 class CommandOutcome(StrEnum):
@@ -191,6 +196,7 @@ class PlaybackObservation:
     playback_id: str | None = None
     session_active: bool | None = None
     connection_reset: bool = False
+    pause_supported: bool | None = None
 
     def __post_init__(self) -> None:
         _require_aware(self.observed_at)
@@ -210,6 +216,8 @@ class PlaybackObservation:
                     raise ValueError(f"{name} must be non-negative")
         if self.ad_active is not None and not isinstance(self.ad_active, bool):
             raise ValueError("ad state must be true, false or unknown")
+        if self.pause_supported is not None and not isinstance(self.pause_supported, bool):
+            raise ValueError("pause support must be true, false or unknown")
         if self.session_active is False and (
             self.session_id is not None
             or self.application_id is not None

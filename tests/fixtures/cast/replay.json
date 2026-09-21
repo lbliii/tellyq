@@ -9,32 +9,32 @@
     {
       "name": "playing first position",
       "message": {"type": "MEDIA_STATUS", "status": [{"mediaSessionId": 101, "playerState": "PLAYING", "currentTime": 10, "media": {"contentId": "synthetic-episode-a", "duration": 120, "metadata": {"title": "Synthetic Episode"}}}]},
-      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": "synthetic-episode-a", "title": "Synthetic Episode", "player_state": "PLAYING", "position": 10.0, "duration": 120.0, "idle_reason": null, "ad_break": null}
+      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": "synthetic-episode-a", "title": "Synthetic Episode", "player_state": "PLAYING", "position": 10.0, "duration": 120.0, "idle_reason": null, "ad_break": null, "pause_supported": null}
     },
     {
       "name": "playing later position without repeated metadata",
       "message": {"type": "MEDIA_STATUS", "status": [{"mediaSessionId": 101, "playerState": "PLAYING", "currentTime": 12}]},
-      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "PLAYING", "position": 12.0, "duration": null, "idle_reason": null, "ad_break": null}
+      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "PLAYING", "position": 12.0, "duration": null, "idle_reason": null, "ad_break": null, "pause_supported": null}
     },
     {
       "name": "buffering at nominal duration",
       "message": {"type": "MEDIA_STATUS", "status": [{"mediaSessionId": 101, "playerState": "BUFFERING", "currentTime": 120, "media": {"duration": 120}}]},
-      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "BUFFERING", "position": 120.0, "duration": 120.0, "idle_reason": null, "ad_break": null}
+      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "BUFFERING", "position": 120.0, "duration": 120.0, "idle_reason": null, "ad_break": null, "pause_supported": null}
     },
     {
       "name": "ad break",
       "message": {"type": "MEDIA_STATUS", "status": [{"mediaSessionId": 101, "playerState": "PLAYING", "currentTime": 120, "breakStatus": {"breakId": "synthetic-break", "currentBreakTime": 0}}]},
-      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "PLAYING", "position": 120.0, "duration": null, "idle_reason": null, "ad_break": true}
+      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "PLAYING", "position": 120.0, "duration": null, "idle_reason": null, "ad_break": true, "pause_supported": null}
     },
     {
       "name": "pause",
       "message": {"type": "MEDIA_STATUS", "status": [{"mediaSessionId": 101, "playerState": "PAUSED", "currentTime": 119}]},
-      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "PAUSED", "position": 119.0, "duration": null, "idle_reason": null, "ad_break": null}
+      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": null, "title": null, "player_state": "PAUSED", "position": 119.0, "duration": null, "idle_reason": null, "ad_break": null, "pause_supported": null}
     },
     {
       "name": "explicit end marker",
       "message": {"type": "MEDIA_STATUS", "status": [{"mediaSessionId": 101, "playerState": "IDLE", "idleReason": "FINISHED", "currentTime": 120, "media": {"contentId": "synthetic-episode-a"}}]},
-      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": "synthetic-episode-a", "title": null, "player_state": "IDLE", "position": 120.0, "duration": null, "idle_reason": "FINISHED", "ad_break": null}
+      "expected": {"kind": "media", "empty_status": false, "media_session_id": 101, "content_id": "synthetic-episode-a", "title": null, "player_state": "IDLE", "position": 120.0, "duration": null, "idle_reason": "FINISHED", "ad_break": null, "pause_supported": null}
     },
     {
       "name": "empty media",
@@ -44,7 +44,7 @@
     {
       "name": "malformed media containers",
       "message": {"type": "MEDIA_STATUS", "status": [{"mediaSessionId": true, "playerState": ["PLAYING"], "currentTime": "120", "media": ["invalid"], "breakStatus": {"breakId": 5}}]},
-      "expected": {"kind": "media", "empty_status": false, "media_session_id": null, "content_id": null, "title": null, "player_state": null, "position": null, "duration": null, "idle_reason": null, "ad_break": null}
+      "expected": {"kind": "media", "empty_status": false, "media_session_id": null, "content_id": null, "title": null, "player_state": null, "position": null, "duration": null, "idle_reason": null, "ad_break": null, "pause_supported": null}
     },
     {
       "name": "load error",

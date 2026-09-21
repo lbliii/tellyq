@@ -42,7 +42,9 @@ class WireObservations(Protocol):
 
 def _wire_receipt(receipt: CommandReceipt) -> WireReceipt:
     return {
-        "action": "play_video" if receipt.action.value == "start" else "quit_app",
+        "action": {"start": "play_video", "stop": "quit_app"}.get(
+            receipt.action.value, receipt.action.value
+        ),
         "requested_at": (receipt.requested_at or receipt.recorded_at).isoformat(),
         "recorded_at": receipt.recorded_at.isoformat(),
         "returned": receipt.outcome == CommandOutcome.ACCEPTED,
@@ -62,6 +64,7 @@ def _observations(result: PlaybackResult) -> list[Observation]:
             "position": event.position,
             "duration": event.duration,
             "ad_break": event.ad_active,
+            "pause_supported": event.pause_supported,
             "idle_reason": event.idle_reason.value.upper() if event.idle_reason else None,
             "app_id": event.application_id,
             "app_session_id": event.session_id,
@@ -201,7 +204,16 @@ def execute(
     update_queue = False
     with command_lock(runtime):
         try:
-            if command not in {"discover", "queue", "probe", "start", "status", "stop"}:
+            if command not in {
+                "discover",
+                "queue",
+                "probe",
+                "start",
+                "status",
+                "stop",
+                "pause",
+                "resume",
+            }:
                 raise ValueError("Unknown command.")
             if not 5 <= seconds <= 120:
                 raise ValueError("Observation window must be between 5 and 120 seconds.")
@@ -262,7 +274,7 @@ def execute(
                 )
                 owned = owned or _legacy_snapshot(runtime, request, clock)
                 if (
-                    command in {"status", "stop"}
+                    command in {"status", "stop", "pause", "resume"}
                     and owned is not None
                     and owned.scope.request.target == target
                 ):
@@ -306,8 +318,20 @@ def execute(
                             queue["items"][0]["state"] = "unconfirmed"
                             save(runtime / "queue.json", queue)
                             update_queue = True
-                        result = application.stop(request, owned)
+                        if command == "pause":
+                            result = application.pause(request, owned)
+                        elif command == "resume":
+                            result = application.resume(request, owned)
+                        else:
+                            result = application.stop(request, owned)
+                    capabilities = backend.capabilities(target)
+                    report["capabilities"] = {
+                        field.name: getattr(capabilities, field.name).support.value
+                        for field in fields(capabilities)
+                    }
                     code = _result_report(report, result, clock)
+                    if command in {"pause", "resume"}:
+                        report["control_observed"] = result.control_observed
                     if isinstance(backend, WireObservations):
                         report["observations"] = [
                             event.copy() for event in backend.raw_observations

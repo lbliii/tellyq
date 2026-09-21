@@ -31,6 +31,7 @@ class Observation(TypedDict, total=False):
     duration: float | None
     idle_reason: str | None
     ad_break: bool | None
+    pause_supported: bool | None
     app_id: str | None
     app_name: str | None
     app_session_id: str | None
@@ -99,6 +100,7 @@ class Report(TypedDict, total=False):
     state: str
     requested_content_id: str
     evidence: Evidence
+    control_observed: bool
     stop_confirmed: bool
     stop_verification_source: str | None
     error: Error

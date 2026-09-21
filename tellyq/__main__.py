@@ -16,7 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("discover", help="list Cast receivers without starting playback")
     queue = commands.add_parser("queue", help="save the one-item Bob Ross queue without playback")
     queue.add_argument("--device", required=True, help="exact UUID from discover")
-    for name in ("probe", "start", "status", "stop"):
+    for name in ("probe", "start", "status", "stop", "pause", "resume"):
         sub = commands.add_parser(name)
         if name != "start":
             sub.add_argument("--device", required=name == "probe", help="exact UUID from discover")

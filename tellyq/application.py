@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from .domain import policy
-from .domain.ports import Clock, PlaybackBackend, RevisionConflict, SessionStore
+from .domain.ports import Clock, PlaybackBackend, PlaybackControls, RevisionConflict, SessionStore
 from .domain.values import (
     CommandAction,
     CommandOutcome,
@@ -15,7 +15,9 @@ from .domain.values import (
     PlaybackObservation,
     PlaybackRequest,
     PlaybackScope,
+    PlayerState,
     SessionSnapshot,
+    Support,
 )
 
 
@@ -26,6 +28,7 @@ class PlaybackResult:
     receipt: CommandReceipt | None = None
     reason: EvidenceReason = EvidenceReason.AWAITING_OBSERVATION
     failure: PlaybackError | None = None
+    control_observed: bool = False
 
 
 class PlaybackApplication:
@@ -172,7 +175,12 @@ class PlaybackApplication:
             boundary,
             owned.scope.application_id,
         )
-        snapshot = self._apply(SessionSnapshot(scope, stop_requested=owned.stop_requested), events)
+        initial = (
+            replace(owned, scope=replace(scope, started_monotonic=owned.scope.started_monotonic))
+            if owned.scope.connection_generation == latest.connection_generation
+            else SessionSnapshot(scope, stop_requested=owned.stop_requested)
+        )
+        snapshot = self._apply(initial, events)
         if snapshot.ownership_lost:
             raise ValueError("Different content or session is active; refusing to control it.")
         return snapshot
@@ -215,6 +223,117 @@ class PlaybackApplication:
         snapshot = self._apply(policy.record_receipt(snapshot, receipt), events)
         self.last_result = PlaybackResult(
             baseline + events, snapshot, receipt, snapshot.evidence.reason
+        )
+        self.store.save(snapshot, expected_revision=revision)
+        return self.last_result
+
+    def pause(self, request: PlaybackRequest, owned: SessionSnapshot | None) -> PlaybackResult:
+        return self._control(request, owned, CommandAction.PAUSE)
+
+    def resume(self, request: PlaybackRequest, owned: SessionSnapshot | None) -> PlaybackResult:
+        return self._control(request, owned, CommandAction.RESUME)
+
+    def _control(
+        self, request: PlaybackRequest, owned: SessionSnapshot | None, action: CommandAction
+    ) -> PlaybackResult:
+        self.last_result = None
+        try:
+            return self._run_control(request, owned, action)
+        except Exception, KeyboardInterrupt:
+            return self._failed(request)
+
+    def _run_control(
+        self, request: PlaybackRequest, owned: SessionSnapshot | None, action: CommandAction
+    ) -> PlaybackResult:
+        if owned is None or owned.stop_requested or owned.ownership_lost:
+            raise ValueError("No active playback ownership; refusing media control.")
+        revision = self._revision(owned)
+        boundary = self.clock.monotonic()
+        baseline = self.backend.observe(request.target)
+        if any(event.connection_reset for event in baseline):
+            raise ValueError("Connection changed during observation; inspect fresh status.")
+        snapshot = self._reconcile(request, owned, boundary, baseline)
+        media = snapshot.latest
+        expected = PlayerState.PLAYING if action == CommandAction.PAUSE else PlayerState.PAUSED
+        if (
+            media is None
+            or not self._fresh(media, request, boundary)
+            or media.content != request.content
+            or media.connection_generation != snapshot.scope.connection_generation
+            or media.session_id != snapshot.scope.session_id
+            or media.application_id != snapshot.scope.application_id
+            or media.playback_id is None
+            or media.state != expected
+        ):
+            raise ValueError("No fresh owned media in the required state; inspect status.")
+        capabilities = self.backend.capabilities(request.target)
+        capability = capabilities.pause if action == CommandAction.PAUSE else capabilities.resume
+        if not isinstance(self.backend, PlaybackControls) or capability.support not in {
+            Support.ADVERTISED,
+            Support.VERIFIED,
+        }:
+            error = PlaybackError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                "This media control is unsupported or its capability is unknown.",
+                request.request_id,
+                False,
+                "Inspect fresh status and receiver support.",
+            )
+            receipt = CommandReceipt(
+                request.request_id,
+                request.attempt_id,
+                action,
+                CommandOutcome.REJECTED,
+                self.clock.utcnow(),
+                error,
+            )
+            return PlaybackResult(baseline, snapshot, receipt, snapshot.evidence.reason)
+        backend = self.backend
+        playback_id = media.playback_id
+        effect = backend.pause if action == CommandAction.PAUSE else backend.resume
+        requested_at = self.clock.utcnow()
+        intent = CommandReceipt(
+            request.request_id,
+            request.attempt_id,
+            action,
+            CommandOutcome.UNKNOWN,
+            requested_at,
+            requested_at=requested_at,
+        )
+        # Durable run reports retain intent before any remote effect. The JSON
+        # snapshot store deliberately does not resurrect receipts on restart.
+        if self.on_receipt is not None:
+            self.on_receipt(intent)
+        snapshot = self._persist(policy.record_receipt(snapshot, intent), revision)
+        revision = snapshot.revision
+        command_boundary = self.clock.monotonic()
+        receipt = self._dispatch(
+            request, action, baseline, lambda: effect(snapshot.scope, playback_id)
+        )
+        events = self.backend.observe(request.target)
+        self.last_result = PlaybackResult(baseline + events, receipt=receipt)
+        snapshot = self._apply(policy.record_receipt(snapshot, receipt), events)
+        observed = snapshot.latest
+        wanted = PlayerState.PAUSED if action == CommandAction.PAUSE else PlayerState.PLAYING
+        control_observed = bool(
+            receipt.outcome == CommandOutcome.ACCEPTED
+            and not snapshot.ownership_lost
+            and observed is not None
+            and self._fresh(observed, request, command_boundary)
+            and observed.content == request.content
+            and observed.connection_generation == snapshot.scope.connection_generation
+            and observed.session_id == snapshot.scope.session_id
+            and observed.application_id == snapshot.scope.application_id
+            and snapshot.state == wanted
+            and observed.playback_id == playback_id
+            and observed.state == wanted
+        )
+        self.last_result = PlaybackResult(
+            baseline + events,
+            snapshot,
+            receipt,
+            snapshot.evidence.reason,
+            control_observed=control_observed,
         )
         self.store.save(snapshot, expected_revision=revision)
         return self.last_result

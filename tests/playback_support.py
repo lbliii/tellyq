@@ -38,7 +38,7 @@ class FakeTransport:
         self.stopped = False
         self.session = "session"
         self.content = "FozIp7Va7dY"
-        self.ad = False
+        self.ad: bool | None = False
         self.position = 10.0
         self.state = "PLAYING"
         self.media = True
@@ -106,7 +106,7 @@ class FakeBackend:
         self.content = ContentRef("youtube", "FozIp7Va7dY")
         self.position = 0.0
         self.session = "session"
-        self.ad = False
+        self.ad: bool | None = False
 
     def capabilities(self, target):
         assert target == self.target
