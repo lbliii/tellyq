@@ -20,6 +20,10 @@ classifiers = [
 
 [project.scripts]
 tellyq = "tellyq.__main__:main"
+tellyq-mcp = "tellyq.mcp:main"
+
+[project.optional-dependencies]
+mcp = ["milo-cli==0.4.3"]
 
 [tool.setuptools.packages.find]
 include = ["tellyq*"]
@@ -30,6 +34,7 @@ tellyq = ["py.typed"]
 [dependency-groups]
 dev = [
     "build>=1.2,<2",
+    "milo-cli==0.4.3",
     "poethepoet>=0.29,<1",
     "prek>=0.2,<1",
     "pytest>=9,<10",

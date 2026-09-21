@@ -108,6 +108,26 @@ uv run --locked tellyq status
 uv run --locked tellyq stop
 ```
 
+The optional M3 stdio MCP surface uses the same already-running foreground
+owner. Start the owner separately, then configure its absolute private runtime
+when launching Milo; the MCP caller cannot supply a runtime path or create a
+second playback owner:
+
+```sh
+mkdir -p runtime/mcp-owner
+cp examples/session.json runtime/mcp-session.json
+# Edit runtime/mcp-session.json with a fresh queue_id and discovered device UUID.
+uv run --locked tellyq --runtime "$PWD/runtime/mcp-owner" serve \
+  --manifest "$PWD/runtime/mcp-session.json"
+TELLYQ_OWNER_RUNTIME="$PWD/runtime/mcp-owner" \
+  uv run --locked --extra mcp tellyq-mcp --mcp
+```
+
+MCP exposes only `start`, `status`, and `stop`. An accepted `start` ticket is
+not verified playback; use `status` for timestamped evidence. Stopping the MCP
+process does not stop the separate foreground owner. See [the M3 MCP
+foundation](docs/M3-MCP.md) for the remaining parity and live checklist.
+
 `queue` only writes the local one-item queue. `start` plays it and observes for
 30 seconds, then exits while playback continues. `status` obtains fresh events
 without starting or resuming anything. `stop` exits the saved YouTube receiver
