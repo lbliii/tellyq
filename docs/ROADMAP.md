@@ -1,11 +1,10 @@
 # TellyQ roadmap
 
 Updated 2026-09-21. M0's hardware proof is verified. M1's domain contracts,
-validated storage and Cast normalization are merged. Application integration and
-stop-verification candidates passed combined offline checks (351 tests), and both
-code PR heads passed macOS/Linux CI. Merge, checks of the actual merged commit
-and a fresh hardware regression remain pending. The later milestones
-below are proposed work. See the [M1 acceptance record](M1-ACCEPTANCE.md) for
+validated storage, Cast normalization, application integration and stop-verification
+fix are merged. Actual `main` at `71a3c39` passed 351 offline tests, packaging/install
+checks, macOS/Linux CI and the bounded live regression. **M1 passed at `71a3c39`.**
+Unknown ad state remains explicit. The later milestones below are proposed work. See the [M1 acceptance record](M1-ACCEPTANCE.md) for
 commit-specific results and remaining gates.
 
 ## Product goal
@@ -23,7 +22,7 @@ are proven on the actual device. A graphical interface is optional.
 | ID | Outcome | Completion evidence | Status / dependency |
 | --- | --- | --- | --- |
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
-| M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | In progress: foundations merged; combined candidate validated, merge/live acceptance pending; M0 |
+| M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
 | M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | M1 |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | M2 |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
@@ -42,13 +41,15 @@ workstreams, file ownership, PRs targeting `main`, and a later integration gate.
 
 The frozen domain values, pure evidence policy, backend/store/clock protocols,
 validated legacy storage and defensive Cast parser have landed. The second-wave
-candidates connect those boundaries to the controller, move Cast session handling
+changes connect those boundaries to the controller, move Cast session handling
 into the adapter, inject the clock and store, and use the extracted Bob Ross
 example data. They also address the stop-verification regression, where YouTube
-exited visibly but software retained `playing`. The combined candidate passed
-351 offline tests and packaging/install checks; both code PR heads
-also passed macOS/Linux CI. Merge, checks on actual `main` and a fresh live
-regression determine final acceptance.
+exited visibly but software retained `playing`. The combined candidate and actual
+merged `main` at `71a3c39` passed 351 offline tests and packaging/install checks.
+Both code PR heads and merged `main` passed macOS/Linux CI. The fresh live
+regression then passed visible start, two status reads without restarting,
+machine-verified app exit, visible Chromecast home screen and persisted stopped
+state. M1 is accepted at `71a3c39`; unknown ads still limit strict playback proof.
 
 Introduce only the protocols needed by the existing backend and a test double.
 Use the design in [ARCHITECTURE.md](ARCHITECTURE.md), including separate playback,
@@ -204,9 +205,8 @@ separate compatibility lane, not a prerequisite for the useful release.
 
 ## Immediate next work
 
-Review and merge M1's application and stop-evidence candidates, then test actual
-merged `main`. Run the explicitly requested bounded hardware regression and record
-the accepted commit. The combined candidate's shared adapter/flow checks already
-pass. Run M2a's natural-ending experiments before implementing automatic advancement. M4's
+M1 is accepted at `71a3c39`. Next, plan and explicitly request M2a's natural-ending
+experiments before implementing automatic advancement. Preserve the known
+unknown-ad limitation while researching trustworthy lifecycle signals. M4's
 inventory and route research can proceed alongside that work; it need not block
 the core.

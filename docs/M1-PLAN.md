@@ -1,10 +1,11 @@
 # M1 execution plan: maintainable playback core
 
-Updated 2026-09-21. Foundation PRs are merged into `main`; this second wave starts
-from `a2b72a9`. The original YouTube playback proof is M0. M1 finishes the core
+Updated 2026-09-21. Foundations and second-wave code are merged into `main` at
+`71a3c39`. This wave started from `a2b72a9`. The original YouTube playback proof is M0. M1 finishes the core
 boundaries and stop verification before M2 adds continuous monitoring and queue
 advancement. Its [acceptance record](M1-ACCEPTANCE.md) tracks separate source, CI,
-artifact and hardware gates. **M1 is not yet complete.**
+artifact and hardware gates. **M1 passed at `71a3c39`**, including the fresh
+bounded hardware regression; natural endings and advancement remain M2 work.
 
 ## Delivery strategy
 
@@ -33,8 +34,8 @@ were deliberately usable without changing the existing controller all at once.
 The [planning PR #4](https://github.com/lbliii/tellyq/pull/4) is also merged.
 Coordinator review resolved an expired progress anchor, a session-bootstrap port
 dependency cycle, overflowing JSON numbers and malformed receiver messages being
-mistaken for app exit. Those changes do not yet connect the controller to every
-new contract.
+mistaken for app exit. Those foundation changes did not yet connect the controller
+to every new contract; the second wave below completed that integration.
 
 A temporary combination passed 251 tests and full packaging checks. After merge,
 `main` at `a2b72a9` also passed `uv run --locked poe ci`: **251 tests**, **91.2%**
@@ -47,12 +48,12 @@ but the parser rejected idle receiver replies without `applications`, so the
 report was `unconfirmed` and the queue still said `playing`. This is a software
 verification/persistence gap; the expected visible stop is app exit, not pause.
 
-## Wave 2: current independent workstreams
+## Wave 2: independently delivered workstreams
 
 | Task | Branch / owned files | Required outcome |
 | --- | --- | --- |
-| D2/D3/D4: Application and contract integration | [Draft PR #9](https://github.com/lbliii/tellyq/pull/9), `codex/m1-application`; application/controller/adapters, JSON report contracts and associated offline tests; `docs/m1/application.md` | Inject backend/store/clock, use domain policy with fresh owned scopes, preserve legacy state and CLI names, version report output, exercise the same fake/Cast backend contracts and application scenarios |
-| S1: Receiver idle/stop evidence | [Draft PR #8](https://github.com/lbliii/tellyq/pull/8), `codex/m1-stop-evidence`; Cast parser/observer and associated tests/fixtures; `docs/m1/stop-evidence.md` | Recognize a justified, fresh correlated idle reply while refusing malformed, partial or stale replies; preserve unknown fields and prevent false stop confirmation |
+| D2/D3/D4: Application and contract integration | [Merged PR #9](https://github.com/lbliii/tellyq/pull/9), `codex/m1-application`; application/controller/adapters, JSON report contracts and associated offline tests; `docs/m1/application.md` | Inject backend/store/clock, use domain policy with fresh owned scopes, preserve legacy state and CLI names, version report output, exercise the same fake/Cast backend contracts and application scenarios |
+| S1: Receiver idle/stop evidence | [Merged PR #8](https://github.com/lbliii/tellyq/pull/8), `codex/m1-stop-evidence`; Cast parser/observer and associated tests/fixtures; `docs/m1/stop-evidence.md` | Recognize a justified, fresh correlated idle reply while refusing malformed, partial or stale replies; preserve unknown fields and prevent false stop confirmation |
 | E1: Acceptance and documentation | `codex/m1-acceptance`; README and shared docs | Correct stale foundation status, record the failed machine-stop checkpoint honestly, review contracts and keep commit-specific acceptance gates and remaining limits visible |
 | E2: Combined review | Coordinator; isolated integration worktree | Review independent PRs, resolve cross-boundary mismatches, run exact combined code through `poe ci` and installed artifacts, inspect macOS/Linux CI and record results |
 
@@ -65,7 +66,7 @@ M1 complete because its independent suite passes.
 The stop-evidence candidate at `a0f6219` independently passed `poe ci`: 301 tests,
 93.0% branch-inclusive coverage, lint/format/types, build and isolated install.
 Its [macOS/Linux CI](https://github.com/lbliii/tellyq/actions/runs/35619797156) also passed.
-[PR #8](https://github.com/lbliii/tellyq/pull/8) remains separate from the application
+[PR #8](https://github.com/lbliii/tellyq/pull/8) was independent of the application
 candidate. The application candidate at `92bea46` also passed `poe ci`: 301 tests, 90.6%
 branch-inclusive coverage and all build/install checks.
 
@@ -75,8 +76,17 @@ branch-inclusive coverage, Ruff/format/ty, source/wheel builds and isolated
 install/CLI smoke. Both code PRs passed macOS and Ubuntu CI;
 [PR #9 run](https://github.com/lbliii/tellyq/actions/runs/35620484798). The combined
 installed wheel also imported the core without Cast/Milo/Chirp or socket/runtime
-side effects. Merged-main verification and the explicitly requested hardware rerun
-remain pending. No new hardware test ran in this wave.
+side effects.
+
+PR #8 merged at `110cf52`; PR #9 merged at `71a3c39`. The coordinator pulled actual
+`main` at `71a3c39` and reran full `poe ci`: **351 tests**, **91.8%** coverage and
+all build/install checks passed. Its
+[macOS/Linux CI run](https://github.com/lbliii/tellyq/actions/runs/35620756804)
+also passed. The explicitly requested hardware rerun then passed on that commit:
+visible exact-title playback, two statuses without restart, machine-verified app
+exit, user-confirmed Chromecast home screen and persisted stopped state. Ad state
+remained unknown, so strict playback proof stayed unconfirmed rather than
+inventing inactive-ad evidence. M1 is accepted at `71a3c39`.
 
 ## Decisions that integration must preserve
 
@@ -113,8 +123,8 @@ behavior. Final PR heads need macOS/Linux CI; merged `main` needs its own check.
 The [acceptance record](M1-ACCEPTANCE.md) supplies the detailed replay, wire/state,
 isolation, stop and bounded hardware criteria.
 
-After integration, a separately requested supervised start/status/status/stop
-regression must verify visible behavior and machine stop independently. No natural
+After integration, the explicitly requested supervised start/status/status/stop
+regression verified visible behavior and machine stop independently. No natural
 ending is required for M1. M2a owns full lifecycle experiments with ads, pauses,
 buffering and natural endings; M2b owns automatic advancement. MCP, subscription
 adapters, UI, a daemon and free-threaded support claims are outside this wave.
@@ -131,5 +141,7 @@ adapters, UI, a daemon and free-threaded support claims are outside this wave.
 - [x] S1: conservative idle/stop evidence and persistence fix pass offline regression tests.
 - [x] E2 local: exact combined code, source/wheel artifacts and isolated install pass.
 - [x] E2 platform: both final code PR heads pass macOS/Linux CI; installed core imports without Cast.
-- [ ] Merge reviewed PRs; check the actual merged `main` and run authorized hardware regression.
-- [ ] E1: record the accepted commit and close M1; proceed to M2a.
+- [x] Merge both code PRs; full local and macOS/Linux CI checks pass on actual `main` at `71a3c39`.
+- [x] Run the explicitly requested hardware regression on merged `main` at `71a3c39`.
+- [x] E1: record the accepted commit `71a3c39` and close M1; M2a is next.
+- [ ] Publish this updated acceptance record by merging [documentation PR #10](https://github.com/lbliii/tellyq/pull/10).

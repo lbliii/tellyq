@@ -74,10 +74,14 @@ regression confirmed visible Bob Ross playback and two status reads without
 restarting. The user confirmed that stop returned to the Chromecast home screen;
 software reported `unconfirmed` and retained `playing` in the saved queue because
 it rejected receiver replies without an `applications` field. Stop is intended to
-exit YouTube, not leave a paused frame. Application and stop-evidence candidates
-have since passed 351 combined offline tests and packaging/install checks. Both
-code PRs also passed macOS/Linux CI. M1 still needs their review/merge,
-merged-main checks and a fresh explicitly requested hardware regression.
+exit YouTube, not leave a paused frame. Application integration and the
+stop-evidence fix have since merged. Actual `main` at `71a3c39` passed 351 offline
+tests, packaging/install checks and macOS/Linux CI. Its fresh bounded hardware
+regression passed: user-confirmed visible Bob Ross, advancing positions across
+two status reads without restarting, machine-verified app exit, user-confirmed
+Chromecast home screen and persisted `stopped` state. M1 is accepted at `71a3c39`.
+Unknown ad state remains explicit; visible playback does not fabricate the
+inactive-ad evidence required for strict receiver playback proof.
 
 See [implementation history](IMPLEMENTATION.md) and the
 [M1 acceptance record](M1-ACCEPTANCE.md). Full-episode completion and automatic

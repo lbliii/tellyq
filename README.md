@@ -23,12 +23,16 @@ storage and Cast normalization are merged. The merged checkpoint at `a2b72a9`
 passed 251 automated tests and packaging checks. A live regression confirmed
 visible playback and status without a restart. Stop returned the TV to the
 Chromecast home screen, as intended, but software failed to recognize the idle
-receiver response and left stale `playing` state. Application integration and this
-stop-verification fix are in [PR #9](https://github.com/lbliii/tellyq/pull/9) and
-[PR #8](https://github.com/lbliii/tellyq/pull/8). Their combined candidate passed
-351 tests plus type, lint, build and installation checks. Merge and a fresh
-hardware regression remain pending; **M1 is not yet accepted**. See the
-[M1 acceptance record](docs/M1-ACCEPTANCE.md) for separate code, CI and hardware gates.
+receiver response and left stale `playing` state. Application integration and the
+stop-verification fix have since merged through
+[PR #9](https://github.com/lbliii/tellyq/pull/9) and
+[PR #8](https://github.com/lbliii/tellyq/pull/8). Actual `main` at `71a3c39` passed
+351 tests plus type, lint, build, installation and macOS/Linux CI checks. The fresh
+hardware regression also passed: visible Bob Ross, two status reads without a
+restart, verified receiver-app exit, user-confirmed Chromecast home screen and
+persisted `stopped` state. **M1 passed at `71a3c39`.** Unknown ad state still limits
+strict receiver playback proof; see the
+[M1 acceptance record](docs/M1-ACCEPTANCE.md) for the separate evidence and limits.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
 
@@ -63,18 +67,18 @@ accidental repeated `start` calls do not restart an active/uncertain attempt.
 
 All commands emit JSON. `commands[].returned` records the command result;
 `evidence.receiver_playback_confirmed` requires the requested content ID, PLAYING
-state, and two advancing positions from the same media session. It does **not**
-prove the TV is displaying the video. Observations retain unknown fields as null.
+state, two advancing positions from the same media session, and explicitly
+inactive ad state. It does **not** prove the TV is displaying the video. Observations retain unknown fields as null.
 Exit code 0 means the operation completed; inspect the evidence/state for its
 outcome. A timeout may leave playback unconfirmed, so inspect status before retrying.
 
-The M1 integration candidate adds `schema_version: 1` to reports and applies the
+The M1 integration adds `schema_version: 1` to reports and applies the
 stricter domain evidence policy: unknown ad state keeps `state: unconfirmed`, even
 when `observed_state: playing` and fresh identity/progress are reported. That
 result does not contradict visible playback; it avoids claiming evidence the
 receiver did not supply. Existing queue/session files remain compatible. New
 snapshots preserve ownership/history while discarding old monotonic evidence on
-process restart. Final adoption is tracked in the acceptance record above.
+process restart. The acceptance record above documents the observed hardware outcome.
 
 `probe --device UUID_FROM_DISCOVER` is the direct playback experiment that bypasses
 the persistent queue. Both `probe` and `start` accept `--seconds 5..120` to change

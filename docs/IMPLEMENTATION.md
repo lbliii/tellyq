@@ -111,13 +111,27 @@ at `a0f6219` and [application PR #9](https://github.com/lbliii/tellyq/pull/9) at
 and isolated install/CLI smoke. These are offline results; no new hardware run,
 natural ending or automatic advancement was tested.
 
-The [acceptance record](M1-ACCEPTANCE.md) keeps source, CI, installed-isolation,
-merged-main and future hardware evidence separate. The candidate results do not
-close M1 by themselves.
+PR #8 merged at `110cf52`, followed by PR #9 at `71a3c39`. The coordinator pulled
+actual `main` at `71a3c39` and reran `poe ci`: 351 tests, 91.8% branch-inclusive
+coverage and all lint/format/type/build/install checks passed. The merged-main
+[macOS/Linux CI run](https://github.com/lbliii/tellyq/actions/runs/35620756804)
+also passed.
+
+The coordinator then ran the explicitly requested hardware regression on that
+commit. Projector was initially idle; the user freshly confirmed visible Bob Ross.
+Exact content/title and PLAYING telemetry advanced from 23.434 seconds after start
+to 57.259 and 96.695 across two status reads in the same app/media session, without
+a restart. Ad state remained unknown, so strict playback proof remained
+unconfirmed; the raw progress and visual confirmation stayed separate evidence.
+The stop report confirmed receiver-app exit, the user confirmed the Chromecast
+home screen, and the queue persisted `stopped`. A new store instance restored stop
+intent with unknown current playback state, not old evidence. **M1 passed at
+`71a3c39`.** The [acceptance record](M1-ACCEPTANCE.md) preserves the detailed gates
+and remaining limitations.
 
 ## Material limits and next work
 
-M0 is complete; M1 remains in progress. Full-episode completion, ads/buffering over
+M0 and M1 are complete. Full-episode completion, ads/buffering over
 an entire program and advancing to a second program have not been tested. The
 [roadmap](ROADMAP.md) finishes the typed-core milestone before validating those
 observations and implementing automatic queue advancement. A Milo MCP interface

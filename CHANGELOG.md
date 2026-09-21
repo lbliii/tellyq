@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-M1's foundation components are merged. The second-wave entries below describe
-review work; final acceptance remains open in [the M1 record](docs/M1-ACCEPTANCE.md).
+M1's foundations and second-wave code are merged. Actual `main` at `71a3c39`
+passed 351 tests, packaging/install checks, macOS/Linux CI and the bounded live
+regression. [M1 is accepted at that commit](docs/M1-ACCEPTANCE.md); unknown-ad
+limitations remain explicit, and natural endings/advancement belong to M2.
 
 - Add immutable domain values, backend/store/clock protocols and pure evidence
   policy, validated version-1 queue and legacy session storage, and defensive
@@ -19,7 +21,9 @@ review work; final acceptance remains open in [the M1 record](docs/M1-ACCEPTANCE
   omits `applications`; reject malformed, partial and stale replies. Stop exits
   YouTube to the Chromecast home screen rather than pausing the video.
 - Record the merged foundation checkpoint and its visible-stop/software-verification
-  mismatch, with explicit M1 acceptance gates and a bounded future hardware rerun.
+  mismatch and its successful regression: visible playback, status without
+  restarting, machine-verified app exit, user-confirmed Chromecast home screen
+  and persisted `stopped` state.
 
 ### Original playback proof and repository setup
 

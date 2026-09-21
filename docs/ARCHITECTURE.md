@@ -1,6 +1,6 @@
 # TellyQ architecture direction
 
-Updated after the M1 foundation merge, 2026-09-21. This remains a staged design.
+Updated after the M1 integration merge, 2026-09-21. This remains a staged design.
 Implemented boundaries and future interfaces are distinguished below; the diagram
 shows the intended direction, including later milestones.
 
@@ -8,11 +8,13 @@ At `a2b72a9`, `tellyq/domain/` contains immutable values, backend/store/clock
 protocols and pure evidence policy. `tellyq/state.py` validates version-1 queue and
 legacy session JSON, and `tellyq/cast_messages.py` normalizes unknown Cast input
 without importing PyChromecast. Typed wire records, Ruff/ty/pytest, the uv lock
-and packaging/CI checks are also in place. The live controller has not yet adopted
-all those contracts. M1's second-wave candidates add `PlaybackApplication`, a
-Cast adapter, a revision-checked JSON snapshot store and versioned reports, plus
-correlated receiver-idle evidence. The combined candidates passed 351 offline
-tests and packaging/install checks; merge and live acceptance remain pending.
+and packaging/CI checks were also in place. M1's second wave has since merged:
+`PlaybackApplication`, a Cast adapter, a revision-checked JSON snapshot store,
+versioned reports and correlated receiver-idle evidence now connect those
+boundaries to the controller. Actual `main` at `71a3c39` passed 351 offline tests,
+packaging/install checks and macOS/Linux CI. The bounded live start/status/stop
+regression also passed; M1 is accepted at that commit. Unknown ad state still
+limits strict receiver playback proof, as recorded separately from visual evidence.
 See the [acceptance record](M1-ACCEPTANCE.md).
 
 Milo/MCP, Chirp, a persistent runner, SQLite and a `src/` layout are future work;
@@ -65,8 +67,8 @@ the boundary; use typed values within the application.
 | `SessionSnapshot` | One scoped attempt, revision, receipt, latest observations, evidence, stop intent and ownership state. Multi-item queue execution is later work. |
 | `DisplayEvidence` | Separate timestamped user confirmation or verified display signal. Historical confirmation never proves current TV power/input. |
 
-The first three ports are defined in `tellyq/domain/ports.py`; production
-application adapters are M1's remaining integration work:
+The first three ports are defined in `tellyq/domain/ports.py` and used by the
+merged application, Cast adapter and snapshot store:
 
 - `PlaybackBackend`: describe capabilities, start an exact request, obtain
   observations and stop an owned session. Pause/seek use separate supported
