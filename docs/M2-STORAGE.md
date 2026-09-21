@@ -126,9 +126,13 @@ are mode `0600`. Each operation owns and closes its own SQLite connection.
 Explicit transactions commit queue position, attempts and intents together, with
 foreign keys, full synchronization, revision checks and rollback on failure.
 No connection or database lock is held across network work. Symlink runtime/DB
-paths are rejected. Unknown schema versions, schema changes and corrupt files
+paths are rejected. Unknown schema versions, schema changes (including added
+triggers, views or custom indexes) and corrupt files
 fail with the original data retained; opening never overwrites them with an
-empty queue.
+empty queue. Schema validation runs again before each transaction, so a schema
+change after opening cannot alter cancellation or other journal updates. SQLite's
+automatic indexes for the declared primary-key and uniqueness constraints remain
+supported.
 
 Focused offline tests cover independent thread/process writers, rollback after
 an intent collision, cancellation/start races, stale dispatch, uncertain effects,

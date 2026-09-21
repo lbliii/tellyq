@@ -580,3 +580,47 @@ def test_orphaned_command_rejected_on_reopen(store):
     with pytest.raises(QueueStoreError, match="references"):
         SQLiteQueueStore(store.path.parent)
     assert store.path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        """CREATE TRIGGER clear_cancellation AFTER UPDATE OF cancellation_requested ON queues
+           WHEN NEW.cancellation_requested = 1
+           BEGIN UPDATE queues SET cancellation_requested=0 WHERE queue_id=NEW.queue_id; END""",
+        "CREATE VIEW unexpected_view AS SELECT * FROM queues",
+        "CREATE INDEX unexpected_index ON queues(device_id)",
+    ],
+    ids=["trigger-reverses-cancellation", "view", "custom-index"],
+)
+def test_unknown_schema_objects_rejected_on_reopen_and_existing_store_mutation(store, statement):
+    with closing(sqlite3.connect(store.path)) as connection, connection:
+        connection.execute(statement)
+    original = store.path.read_bytes()
+    with pytest.raises(QueueStoreError, match="schema"):
+        SQLiteQueueStore(store.path.parent)
+    assert store.path.read_bytes() == original
+    with pytest.raises(QueueStoreError, match="schema"):
+        store.cancel_queue("queue", expected_revision=0)
+    with pytest.raises(QueueStoreError, match="schema"):
+        prepare(store)
+    with pytest.raises(QueueStoreError, match="schema"):
+        store.load("queue")
+    assert store.path.read_bytes() == original
+    with closing(sqlite3.connect(store.path)) as connection:
+        assert connection.execute(
+            "SELECT cancellation_requested, revision FROM queues WHERE queue_id='queue'"
+        ).fetchone() == (0, 0)
+        assert connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 0
+
+
+def test_schema_keeps_sqlite_automatic_constraint_indexes(store):
+    with closing(sqlite3.connect(store.path)) as connection:
+        indexes = connection.execute(
+            "SELECT name, sql FROM sqlite_schema WHERE type='index'"
+        ).fetchall()
+    assert indexes and all(
+        name.startswith("sqlite_autoindex_") and sql is None for name, sql in indexes
+    )
+    reopened = SQLiteQueueStore(store.path.parent)
+    assert prepare(reopened).commands[0].state == ExecutionState.PENDING

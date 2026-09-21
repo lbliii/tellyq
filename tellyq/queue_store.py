@@ -155,12 +155,22 @@ class SQLiteQueueStore:
     def _validate_schema(connection: sqlite3.Connection, *, integrity: bool = False) -> None:
         if connection.execute("PRAGMA user_version").fetchone()[0] != _SCHEMA_VERSION:
             raise QueueStoreError("unsupported queue database version; retain it for recovery")
-        definitions = {
-            row["name"]: row["sql"]
-            for row in connection.execute("SELECT name, sql FROM sqlite_master WHERE type='table'")
-        }
+        objects = connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_schema"
+        ).fetchall()
+        definitions = {row["name"]: row["sql"] for row in objects if row["type"] == "table"}
         expected = {statement.split()[2]: statement for statement in _SCHEMA}
-        if definitions != expected:
+        unexpected_objects = any(
+            row["type"] != "table"
+            and not (
+                row["type"] == "index"
+                and row["name"].startswith("sqlite_autoindex_")
+                and row["tbl_name"] in expected
+                and row["sql"] is None
+            )
+            for row in objects
+        )
+        if definitions != expected or unexpected_objects:
             raise QueueStoreError("unrecognized queue database schema; retain it for recovery")
         if integrity and connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise QueueStoreError("corrupt queue database; retain it for recovery")
