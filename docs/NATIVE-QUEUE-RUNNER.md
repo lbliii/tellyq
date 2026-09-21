@@ -73,9 +73,10 @@ manufacture completion.
 ## Validation boundary
 
 The implementation is exercised offline across the task, application, SQLite,
-observation and service boundaries. Prototype native handoffs were observed on
-hardware before this integration; they do not validate this composed runner.
-The [M2 plan](M2-NATIVE-QUEUE-PLAN.md#acceptance-gates) still requires three
-three-item hardware sessions, six verified handoffs, stop with a staged successor,
-and bounded disconnect/reconnect checks. Preserve missing visual confirmation,
-unproven clear semantics, remote autoplay and transport race limits in the results.
+observation and service boundaries. The [merged hardware checkpoint](NATIVE-RUNNER-CHECKPOINT.md)
+passed one complete three-item sequence, active stop with a staged successor and
+bounded process-loss recovery. A second sequence held after its middle item, so
+the [M2 plan](M2-NATIVE-QUEUE-PLAN.md#acceptance-gates) still requires the three
+successful three-item sessions and six verified handoffs. Missing visual
+confirmation, unproven clear semantics, remote autoplay and transport races remain
+explicit limits.

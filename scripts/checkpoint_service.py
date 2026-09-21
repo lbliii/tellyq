@@ -103,7 +103,8 @@ def main(argv: list[str] | None = None) -> int:
             entry["action"] for entry in commands if entry["first_verified_state_ms"] is not None
         }
         return int(
-            summary["stop_reason"] not in {"queue_finished_and_released", "stop_observed"}
+            summary["stop_reason"]
+            not in {"queue_finished", "queue_finished_and_released", "stop_observed"}
             or not required <= verified
             or (
                 options.cleanup_stop

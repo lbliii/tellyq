@@ -418,6 +418,64 @@ def test_new_checkpoint_output_never_overwrites_previous_attempt(monkeypatch, tm
     capsys.readouterr()
 
 
+@pytest.mark.parametrize("unverified, expected", [(None, 0), ("start", 1), ("stop", 1)])
+def test_native_script_exit_requires_verified_start_and_requested_cleanup(
+    monkeypatch, tmp_path, capsys, unverified, expected
+):
+    monkeypatch.chdir(tmp_path)
+    Path("runtime/owner").mkdir(parents=True)
+    clock = Clock()
+
+    class NativeClient(Client):
+        def status(self):
+            response = super().status()
+            view = response["snapshot"]["view"]
+            view["queue"]["mode"] = "native"
+            playback = view["playback"]
+            if playback:
+                playback["release_confirmed"] = False
+                if self.last is not None and self.last[0] == unverified:
+                    playback["state"] = "buffering"
+                    playback["evidence"]["receiver_playback_confirmed"] = False
+            return response
+
+    client = NativeClient(clock, finish=True)
+    monkeypatch.setattr(
+        checkpoint_service, "load_manifest", lambda _: replace(SPEC, mode=QueueMode.NATIVE)
+    )
+    monkeypatch.setattr(checkpoint_service, "RunnerIPCClient", lambda *args, **kwargs: client)
+
+    def accelerated(client, spec, options, journal, **kwargs):
+        return run_service_checkpoint(
+            client, spec, options, journal, now=clock.now, wait=clock.wait, **kwargs
+        )
+
+    monkeypatch.setattr(checkpoint_service, "run_service_checkpoint", accelerated)
+    result = checkpoint_service.main(
+        [
+            "start",
+            "--runtime",
+            "runtime/owner",
+            "--manifest",
+            "runtime/manifest.json",
+            "--output",
+            "runtime/checkpoint",
+            "--code-revision",
+            "28d043d",
+            "--seconds",
+            "2",
+            "--cleanup-stop",
+            "--cleanup-seconds",
+            "1",
+        ]
+    )
+    assert result == expected
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["stop_reason"] == "queue_finished"
+    assert summary["cleanup"] == ("unconfirmed" if unverified == "stop" else "stop_observed")
+    assert json.loads(Path("runtime/checkpoint/summary.json").read_text()) == summary
+
+
 def test_repeated_title_handoffs_use_item_identity_and_never_elapsed_duration():
     clock = Clock()
     spec = QueueSpec(

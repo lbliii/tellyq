@@ -1,5 +1,8 @@
 # Native YouTube queue prototype checkpoint
 
+This is the historical prototype record. The subsequent foreground integration
+and merged hardware results are in [NATIVE-RUNNER-CHECKPOINT.md](NATIVE-RUNNER-CHECKPOINT.md).
+
 The supervised prototype observed two A-to-B receiver transitions after
 `play_next(B)`, including one clean repetition without queue readback. A completed
 under the existing ordered-history policy; ads followed; then exact B identity
