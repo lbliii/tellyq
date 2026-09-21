@@ -5,7 +5,24 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from .values import CommandAction, ContentRef, PlaybackTarget
+from .native_queue import NativeQueueAction, NativeQueueRequest
+from .values import CommandAction, ContentRef, PlaybackTarget, SessionSnapshot
+
+
+class QueueMode(StrEnum):
+    LEGACY = "legacy"
+    NATIVE = "native"
+
+
+class AttemptOrigin(StrEnum):
+    LOCAL_START = "local_start"
+    NATIVE_OBSERVED = "native_observed"
+
+
+class NativeReservationState(StrEnum):
+    RESERVED = "reserved"
+    ADOPTED = "adopted"
+    SESSION_EXIT_OBSERVED = "session_exit_observed"
 
 
 class QueueIntent(StrEnum):
@@ -43,6 +60,8 @@ class QueueAttempt:
     intent: QueueIntent
     created_at: datetime
     decision_id: str | None = None
+    origin: AttemptOrigin = AttemptOrigin.LOCAL_START
+    reservation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +76,36 @@ class JournalCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeReservation:
+    reservation_id: str
+    predecessor_attempt_id: str
+    successor_item_id: str
+    successor_attempt_id: str
+    application_id: str
+    session_id: str
+    predecessor_playback_id: str
+    generation: int
+    created_at: datetime
+    state: NativeReservationState = NativeReservationState.RESERVED
+    adoption_decision_id: str | None = None
+    exit_decision_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NativeOperation:
+    operation_id: str
+    reservation_id: str
+    action: NativeQueueAction
+    state: ExecutionState
+    generation: int
+    created_at: datetime
+    updated_at: datetime
+    scope_attempt_id: str
+    connection_generation: str
+    playback_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class QueueSnapshot:
     queue_id: str
     target: PlaybackTarget
@@ -67,6 +116,10 @@ class QueueSnapshot:
     items: tuple[QueueEntry, ...]
     attempts: tuple[QueueAttempt, ...] = ()
     commands: tuple[JournalCommand, ...] = ()
+    mode: QueueMode = QueueMode.LEGACY
+    reconciliation_required: bool = False
+    reservations: tuple[NativeReservation, ...] = ()
+    native_operations: tuple[NativeOperation, ...] = ()
 
 
 class QueueStore(Protocol):
@@ -78,7 +131,12 @@ class QueueStore(Protocol):
     """
 
     def create(
-        self, queue_id: str, target: PlaybackTarget, items: tuple[QueueEntry, ...]
+        self,
+        queue_id: str,
+        target: PlaybackTarget,
+        items: tuple[QueueEntry, ...],
+        *,
+        mode: QueueMode = QueueMode.LEGACY,
     ) -> QueueSnapshot: ...
 
     def load(self, queue_id: str) -> QueueSnapshot | None: ...
@@ -165,3 +223,90 @@ class QueueStore(Protocol):
         ...
 
     def recover(self, queue_id: str, *, expected_revision: int) -> QueueSnapshot: ...
+
+    def hold_for_reconciliation(self, queue_id: str, *, expected_revision: int) -> QueueSnapshot:
+        """Prevent new native staging without claiming cancellation of receiver work."""
+        ...
+
+    def prepare_native_successor(
+        self,
+        queue_id: str,
+        successor_item_id: str,
+        *,
+        reservation_id: str,
+        successor_attempt_id: str,
+        request: NativeQueueRequest,
+        at: datetime,
+        expected_revision: int,
+        expected_generation: int,
+    ) -> QueueSnapshot: ...
+
+    def prepare_native_clear(
+        self,
+        queue_id: str,
+        reservation_id: str,
+        *,
+        request: NativeQueueRequest,
+        at: datetime,
+        expected_revision: int,
+        expected_generation: int,
+    ) -> QueueSnapshot:
+        """Require explicit local cancellation; CLEAR return never proves membership."""
+        ...
+
+    def mark_native_dispatched(
+        self,
+        queue_id: str,
+        operation_id: str,
+        *,
+        at: datetime,
+        expected_revision: int,
+        expected_generation: int,
+    ) -> QueueSnapshot: ...
+
+    def record_native_outcome(
+        self,
+        queue_id: str,
+        operation_id: str,
+        outcome: ExecutionState,
+        *,
+        at: datetime,
+        expected_revision: int,
+        expected_generation: int,
+    ) -> QueueSnapshot: ...
+
+    def adopt_native_successor(
+        self,
+        queue_id: str,
+        reservation_id: str,
+        *,
+        observed: SessionSnapshot,
+        now: float,
+        at: datetime,
+        decision_id: str,
+        expected_revision: int,
+        expected_generation: int,
+    ) -> QueueSnapshot:
+        """Persist caller-qualified fresh B progress; never infer predecessor completion.
+
+        An uncompleted predecessor becomes NEEDS_ATTENTION, retaining cancellation
+        and setting reconciliation hold. No START command or receipt is invented.
+        """
+        ...
+
+    def record_native_session_exit(
+        self,
+        queue_id: str,
+        reservation_id: str,
+        *,
+        at: datetime,
+        decision_id: str,
+        expected_revision: int,
+        expected_generation: int,
+    ) -> QueueSnapshot:
+        """Record caller-verified owned session exit, never an empty playlist claim.
+
+        Caller must first verify fresh correlated receiver idle after its owned
+        stop/release boundary; this store records that decision without device I/O.
+        """
+        ...
