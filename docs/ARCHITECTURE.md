@@ -23,10 +23,13 @@ runner. The merged tree at `6aec896` passed 666 tests; three supported live endi
 across two titles are recorded in the [checkpoint](M2A-CHECKPOINT.md). Queue
 intent/history remains separate from current playback evidence.
 
-The [M2b swarm](M2B-PLAN.md) now implements pure queue decisions, durable dispatch
-and a persistent owner/mailbox as independent components. Their foreground CLI/IPC
-and automatic handoff composition follow review and merge. Milo/MCP, Chirp and a
-`src/` layout remain later work.
+The [M2b components](M2B-PLAN.md) merged at `9715b58`: pure queue decisions, durable
+dispatch and a persistent owner/mailbox. The [foreground composition](FOREGROUND-SERVICE.md)
+connects a concrete playback task, private IPC and CLI clients. Internal RELEASE
+journals cleanup separately from operator cancellation, and a successor still
+requires fresh idle and retained authority. A restarted owner cannot restore live
+evidence from durable history. M2b hardware acceptance remains pending. Milo/MCP,
+Chirp and a `src/` layout remain later work.
 
 ## Design decision
 
@@ -72,7 +75,7 @@ the boundary; use typed values within the application.
 | `PlaybackScope` | An explicitly owned session, connection generation and monotonic start boundary. A command receipt alone cannot establish it. |
 | `CommandReceipt` | Accepted/rejected/unknown, timestamps and structured error, independent of observed playback. |
 | `PlaybackObservation` | Target, content/session identity, fields, source, UTC time, sequence and connection-local monotonic time. Missing fields remain unknown. |
-| `SessionSnapshot` | One scoped attempt, revision, receipt, latest observations, evidence, stop intent and ownership state. Multi-item queue execution is later work. |
+| `SessionSnapshot` | One scoped attempt, revision, receipt, latest observations, evidence, stop intent and ownership state. Process-local release evidence supports guarded multi-item handoffs and is discarded on recovery. |
 | `DisplayEvidence` | Separate timestamped user confirmation or verified display signal. Historical confirmation never proves current TV power/input. |
 
 The first three ports are defined in `tellyq/domain/ports.py` and used by the

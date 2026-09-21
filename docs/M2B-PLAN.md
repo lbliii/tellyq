@@ -171,3 +171,56 @@ a START-only cancellation guard and explicit uncertainty after persistence failu
 These are component acceptance results. They do not establish a running IPC
 service, composed queue recovery, measured live stop latency or automatic handoffs.
 The composition wave above is still required before M2b can close.
+
+## Composition implementation and offline checkpoint
+
+The first wave merged at `9715b58`; a fresh baseline check passed 832 tests.
+The continuation uses isolated branches from that same main, with two component
+PRs and a service integration PR all targeting `main`:
+
+| Stream | Reviewed component | Independent validation |
+| --- | --- | --- |
+| Concrete playback task and handoff | [PR #28](https://github.com/lbliii/tellyq/pull/28), `44f92f08b6d096001a380be7c7866742370e351a` | 875 tests, Ruff/format/ty, wheel/sdist and isolated installation |
+| Private local IPC | [PR #27](https://github.com/lbliii/tellyq/pull/27), `4de6e7647e6ce976217256cb7e718c17b0658c46` | 887 tests, Ruff/format/ty, wheel/sdist and isolated installation |
+| Foreground composition | `codex/m2b-service`, includes both exact component commits | 959 tests, 90.0% branch-inclusive coverage, lint/types, wheel/sdist and isolated installation |
+
+The service integration includes both component histories so its head is usable
+and testable on its own. Merge the two component PRs first for smaller reviews;
+the integration also targets main. No public PR is merged by the agents.
+
+`tellyq serve` validates an explicit queue manifest, acquires owner locks, opens
+the backend on the owner thread and publishes private IPC after a queue view is
+available. It waits for explicit start. Existing control names route to the owner
+when its endpoint exists; connection failure never opens another backend. Ticket
+acceptance/handling, command receipts, observed state and historical completion
+remain separate. Legacy JSON import is explicit and leaves source files intact.
+See [FOREGROUND-SERVICE.md](FOREGROUND-SERVICE.md) for commands and limits.
+
+The task now journals PAUSE/RESUME and a distinct internal RELEASE for finished
+attempts. Release does not cancel the queue or rewrite FINISHED. Next-item start
+requires observed idle after release, durable acknowledgement, retained live
+authority and another check immediately before the effect. Receiver replacement,
+positive ads, replay/reset, cancellation, stale evidence or persistence failure
+hold the queue. Reopening durable history never restores owner authority.
+
+Review fixed a STOP transaction boundary, lost replacement/ad events before a
+successor start, dropped baselines on refused controls, changed-intent command
+retries, and cleanup that could truncate the final IPC shutdown response. Service
+cleanup also joins its threads if stdout fails during a shutdown timeout. Default
+Cast integration rejects non-video content kinds before connecting because the
+adapter normalizes YouTube observations as video identities.
+
+The combined scenario runs actual CLI/AF_UNIX IPC, owner, task and SQLite with a
+synthetic receiver: three items finish, three starts and three releases occur,
+retrying start adds no effect, shutdown closes resources, and reopening the queue
+holds without replay. Internet sockets/DNS remain forbidden. Both component PRs
+also pass their GitHub Python 3.14 macOS/Linux workflows.
+
+**M2b live acceptance remains pending.** No hardware ran during this wave. The
+actual M2a FINISHED → same-title code-5 BUFFERING/position-zero sequence is a
+regression that must HOLD, not a supported handoff. A bounded reinspection of the
+pinned first-party source found no field-specific meaning for this sequence;
+IFrame API numeric values were not substituted. The next supervised checkpoint
+tests foreground ownership/status/stop/shutdown first, then attempts supported
+handoffs. Three three-item live sessions and six handoffs are still required to
+close the milestone.

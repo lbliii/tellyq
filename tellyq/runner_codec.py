@@ -217,6 +217,8 @@ def wire_view(view: TaskView) -> IPCTaskView:
             "revision": sample.revision,
             "ownership_lost": sample.ownership_lost,
             "stop_requested": sample.stop_requested,
+            "release_requested": sample.release_boundary is not None,
+            "release_confirmed": sample.release_confirmed,
             "observed_at": latest.observed_at.isoformat() if latest else None,
             "position": latest.position if latest else None,
             "duration": latest.duration if latest else None,

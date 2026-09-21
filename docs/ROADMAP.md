@@ -31,7 +31,7 @@ are proven on the actual device. A graphical interface is optional.
 | --- | --- | --- | --- |
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
-| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: M2a lifecycle gate passed and merged at `6aec896`; M2b component swarm underway; automatic advancement remains unimplemented |
+| M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | In progress: M2a lifecycle gate passed; M2b components merged at `9715b58`; foreground composition has synthetic handoff tests, with live acceptance pending |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | M2 |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
 | M5 | One subscription service integrated | Two exact titles, three start/status/stop runs, and two cross-service handoffs pass the supported autonomy level | M2 + M4 |
@@ -230,11 +230,12 @@ separate compatibility lane, not a prerequisite for the useful release.
 
 ## Immediate next work
 
-The completion and checkpoint branches are merged and the merged checks pass.
-The [M2b swarm](M2B-PLAN.md) implements one persistent playback owner, a pure queue
-reducer, and durable command execution/recovery on independent branches from
-`6aec896`. Compose their reviewed APIs into the foreground CLI/private IPC after
-merge, then test the integrated behavior.
+The first M2b component wave merged at `9715b58` and passes 832 offline tests.
+The [composition wave](M2B-PLAN.md) connects playback, release/idle handoffs,
+the foreground CLI and private IPC. See [the service guide](FOREGROUND-SERVICE.md)
+for explicit startup, ticket/evidence semantics and recovery. Synthetic handoffs
+do not establish live receiver acceptance. The actual post-finish code-5/reset
+trace remains an explicit HOLD because its meaning is unproven.
 
 The first runner checkpoint must prove single ownership, responsive status/stop,
 no duplicate dispatch after crash/restart, and a hold on replacement content.
