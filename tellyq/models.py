@@ -226,6 +226,8 @@ class YouTubeMetadataSample(TypedDict):
     content_relation: Literal["requested", "other", "unknown"]
     media_session_relation: Literal["first", "same", "changed", "unknown"]
     player_state: str | None
+    custom_player_state: int | None
+    custom_player_state_shape: WireFieldShape
     idle_reason: str | None
     position: float | None
     duration: float | None

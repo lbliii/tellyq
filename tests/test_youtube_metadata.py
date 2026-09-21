@@ -104,7 +104,7 @@ def test_private_schema_opt_in_has_names_and_types_but_never_values():
 
 def test_missing_terminal_fields_are_not_filled_from_previous_sample():
     probe = YouTubeMetadataProbe(CONTENT)
-    probe.receive(message(), observed_at="first", monotonic=1)
+    probe.receive(message(customData={"playerState": 1081}), observed_at="first", monotonic=1)
     probe.receive(
         message(playerState="IDLE", idleReason="FINISHED", media=None),
         observed_at="second",
@@ -116,9 +116,50 @@ def test_missing_terminal_fields_are_not_filled_from_previous_sample():
     assert terminal["content_relation"] == "unknown"
     assert terminal["duration"] is None
     assert terminal["ad_break"] is None
+    assert pending[0][0]["custom_player_state"] == 1081
+    assert terminal["custom_player_state"] is None
+    assert terminal["custom_player_state_shape"] == "absent"
     assert dropped == 0
     probe.receive(message(media={"contentId": "new-title"}), observed_at="third", monotonic=3)
     assert probe.drain()[0][0][0]["content_relation"] == "other"
+
+
+@pytest.mark.parametrize("code", [1081, 0, -1, 987654, -(2**31), 2**31 - 1])
+def test_reviewed_player_state_scalar_is_opaque_and_does_not_establish_ads(code):
+    sample, _ = project(message(customData={"playerState": code, "isAd": False}))
+    assert sample["custom_player_state"] == code
+    assert sample["custom_player_state_shape"] == "valid"
+    assert sample["player_state"] == "PLAYING"
+    assert sample["ad_break"] is None
+
+
+@pytest.mark.parametrize(
+    "code", [True, False, 1081.0, "1081", 2**31, -(2**31) - 1, [], {}, float("nan")]
+)
+def test_reviewed_player_state_rejects_coercion_and_out_of_range_values(code):
+    sample, _ = project(message(customData={"playerState": code}))
+    assert sample["custom_player_state"] is None
+    assert sample["custom_player_state_shape"] == "invalid"
+    json.dumps(sample, allow_nan=False)
+
+
+def test_reviewed_player_state_has_exact_current_status_path_only():
+    sample, _ = project(message(customData={"playerState": None}))
+    assert sample["custom_player_state"] is None
+    assert sample["custom_player_state_shape"] == "null"
+    sample, _ = project(message(customData=None))
+    assert sample["custom_player_state_shape"] == "unavailable"
+    data = message(
+        media={
+            "customData": {"playerState": 1081, "currentIndex": 999999, "listId": "PRIVATE_LIST"}
+        },
+        customData={"nested": {"playerState": 1081}},
+    )
+    sample, _ = project(data)
+    assert sample["custom_player_state"] is None
+    assert sample["custom_player_state_shape"] == "absent"
+    for value in ("1081", "999999", "PRIVATE_LIST", "currentIndex", "listId"):
+        assert value not in json.dumps(sample)
 
 
 @pytest.mark.parametrize("value", [True, float("inf"), float("nan"), -1, "10"])

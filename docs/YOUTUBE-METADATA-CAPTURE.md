@@ -29,9 +29,23 @@ absent, null, wrong type, empty object and nonempty object. Type histograms, ins
 node counts, maximum depth and truncation reveal whether any structured data exists.
 Traversal is limited to 128 nodes and six levels per container, and container entry
 counts are capped at 10,000. Arbitrary provider key names and scalar values are never
-included in this projection. There is no documented YouTube custom-data scalar
-mapping in this tool; booleans such as a hypothetical `isAd` are not promoted to
-evidence merely because they exist.
+included in this structural projection. Booleans such as a hypothetical `isAd`
+are not promoted to evidence merely because they exist.
+
+The only reviewed provider scalar exception is the first status's exact
+`customData.playerState` path. The fixed `custom_player_state` field retains a
+signed 32-bit integer, with no coercion of booleans, floats or strings. Unknown
+in-range codes remain observable as diagnostics. `custom_player_state_shape`
+distinguishes valid, absent, null, invalid and unavailable-parent cases. No prior
+code is carried into a terminal message that omits it, and values at similarly
+named nested/media paths are not selected. `listId`, `currentIndex` and every other
+custom-data scalar remain excluded.
+
+This path is used by the independent [CastBlock receiver-message parser at `9f9b57c`](https://github.com/erdnaxeli/castblock/blob/9f9b57cc55d090eb56934664c7454881d778cbcb/src/chromecast/watch_message.cr),
+which is primary implementation evidence for inspecting an integer, **not an official
+YouTube protocol contract**. This tool does not translate any code into playback,
+ad, title or completion evidence. In particular, a reported code cannot establish
+inactive ads or authorize advancement without separately validated semantics.
 
 Each sample also reports standard current-message position, duration, player state,
 idle reason and the existing ad normalization, plus whether current content matches
