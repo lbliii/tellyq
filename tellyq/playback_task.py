@@ -236,8 +236,10 @@ class PlaybackTask:
     ) -> None:
         queue = self._load()
         request = replace(request, request_id=command_id)
+        application_failed = False
 
         def invoke(dispatch: QueueDispatch) -> CommandReceipt:
+            nonlocal application_failed
             self._dispatch = dispatch
             try:
                 try:
@@ -254,6 +256,7 @@ class PlaybackTask:
                         self.clock.utcnow(),
                     )
                 self._accept(result)
+                application_failed = result.failure is not None
                 return result.receipt or CommandReceipt(
                     command_id,
                     request.attempt_id,
@@ -277,7 +280,26 @@ class PlaybackTask:
             invoke,
             may_start=lambda: not cancellation.requested,
         )
-        if result.command.state in {ExecutionState.UNCERTAIN, ExecutionState.DISPATCHED}:
+        if (
+            action == CommandAction.START
+            and result.operation_invoked
+            and (
+                self._playback is None
+                or self._playback.scope.request.attempt_id != request.attempt_id
+            )
+        ):
+            current = self._load()
+            self.queue_store.settle_attempt(
+                self.queue_id,
+                request.attempt_id,
+                QueueIntent.NEEDS_ATTENTION,
+                decision_id="unconfirmed-" + command_id,
+                expected_revision=current.revision,
+            )
+        if application_failed or result.command.state in {
+            ExecutionState.UNCERTAIN,
+            ExecutionState.DISPATCHED,
+        }:
             current = self._load()
             if not current.cancellation_requested:
                 self.queue_store.cancel_queue(self.queue_id, expected_revision=current.revision)
