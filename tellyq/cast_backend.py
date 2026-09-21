@@ -30,6 +30,13 @@ if TYPE_CHECKING:
     from .cast import Connection
 
 
+@runtime_checkable
+class PendingObservationTransport(Protocol):
+    """Optional nonblocking access to already normalized callbacks after interrupted I/O."""
+
+    def drain_pending(self) -> list[Observation]: ...
+
+
 def video_id(content_id: str | None) -> str | None:
     """Decode YouTube wire identifiers at this provider boundary only."""
     if not content_id:
@@ -52,13 +59,6 @@ class CastTransport(Protocol):
     def observe(self, seconds: float) -> list[Observation]: ...
     def play(self, content_id: str) -> None: ...
     def quit(self) -> None: ...
-
-
-@runtime_checkable
-class PendingObservationTransport(Protocol):
-    """Optional nonblocking access to already normalized callbacks after interrupted I/O."""
-
-    def drain_pending(self) -> list[Observation]: ...
 
 
 class CastBackend:
