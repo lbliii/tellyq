@@ -15,6 +15,11 @@ new activity. It is not inactive-ad evidence or permission to launch another ite
 
 ## Running a session
 
+An optional `"mode": "native"` manifest selects the experimental
+[native YouTube runner](NATIVE-QUEUE-RUNNER.md). It stages one successor within
+the receiver session and uses different reconnect and cleanup rules. The default
+manifest and release/idle behavior described below remain the legacy mode.
+
 Copy [the example manifest](../examples/session.json) to an ignored runtime file.
 It uses the short [nature test clips](LIVE-TEST-MEDIA.md) selected for future live
 checks. Edit the manifest's content IDs and titles to change the viewing selection.

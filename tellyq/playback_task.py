@@ -169,12 +169,7 @@ class PlaybackTask:
         queue = self._load()
         if queue.target != target:
             raise ValueError("Queue belongs to another target")
-        queue = self._executor.recover(
-            queue_id, expected_revision=queue.revision, expected_generation=queue.generation
-        )
-        # Even an acknowledged release/finished row is history, not resumed authority.
-        if queue.attempts and not queue.cancellation_requested:
-            queue_store.cancel_queue(queue_id, expected_revision=queue.revision)
+        self._recover_queue(queue)
         self._resources = ExitStack()
         try:
             backend = self._resources.enter_context(backend_factory())
@@ -183,6 +178,14 @@ class PlaybackTask:
         except BaseException:
             self._resources.close()
             raise
+
+    def _recover_queue(self, queue: QueueSnapshot) -> None:
+        queue = self._executor.recover(
+            self.queue_id, expected_revision=queue.revision, expected_generation=queue.generation
+        )
+        # Even an acknowledged release/finished row is history, not resumed authority.
+        if queue.attempts and not queue.cancellation_requested:
+            self.queue_store.cancel_queue(self.queue_id, expected_revision=queue.revision)
 
     def _check_thread(self) -> None:
         if self._closed or get_ident() != self._thread:
@@ -419,10 +422,13 @@ class PlaybackTask:
             ExecutionState.UNCERTAIN,
             ExecutionState.DISPATCHED,
         }:
-            current = self._load()
-            if not current.cancellation_requested:
-                self.queue_store.cancel_queue(self.queue_id, expected_revision=current.revision)
+            self._hold_after_failure()
         self._cancel(cancellation)
+
+    def _hold_after_failure(self) -> None:
+        current = self._load()
+        if not current.cancellation_requested:
+            self.queue_store.cancel_queue(self.queue_id, expected_revision=current.revision)
 
     def _start(self, command: RunnerCommand, cancellation: Cancellation) -> None:
         request = command.request

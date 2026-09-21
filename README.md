@@ -66,6 +66,13 @@ YouTube code-5/reset behavior retains its protective hold.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
 
+The optional [native YouTube runner](docs/NATIVE-QUEUE-RUNNER.md) now connects the
+durable queue to receiver-managed successors. It reserves one next item, verifies
+its playback before adoption, and reconciles authorized playback on reconnect
+without sending new work. It is opt-in through `"mode": "native"`; existing
+manifests retain legacy behavior. Its composed-runner hardware checkpoint is still
+pending, so M2 remains open. The new example uses quiet nature clips.
+
 For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and
 [architecture direction](docs/ARCHITECTURE.md). They cover typed contracts,
 reliable queueing, Milo CLI/MCP, subscription-service experiments, Cueby's

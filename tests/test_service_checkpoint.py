@@ -1,5 +1,6 @@
 import copy
 import json
+from dataclasses import replace
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import cast
@@ -7,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from tellyq.domain.queue import QueueEntry
+from tellyq.domain.queue import QueueEntry, QueueMode
 from tellyq.domain.values import ContentRef, PlaybackTarget
 from tellyq.models import IPCResponse, IPCValue
 from tellyq.service import QueueSpec
@@ -205,6 +206,75 @@ def test_exact_manifest_mismatch_never_submits_even_cleanup():
     assert result["stop_reason"] == "error"
     assert result["cleanup"] == "not_requested"
     assert client.calls == ["status"]
+
+
+def test_native_mode_mismatch_refuses_before_start_or_cleanup():
+    clock, journal = Clock(), Mock()
+    client = Client(clock)
+    result = run_service_checkpoint(
+        client,
+        replace(SPEC, mode=QueueMode.NATIVE),
+        ServiceCheckpointOptions(mode="start", seconds=2, cleanup_stop=True),
+        journal,
+        now=clock.now,
+        wait=clock.wait,
+    )
+    assert result["stop_reason"] == "error"
+    assert client.calls == ["status"]
+
+
+def test_native_completion_collects_before_separate_cleanup_stop():
+    clock, journal = Clock(), Mock()
+
+    class NativeClient(Client):
+        def status(self):
+            response = super().status()
+            response["snapshot"]["view"]["queue"]["mode"] = "native"
+            playback = response["snapshot"]["view"]["playback"]
+            if playback:
+                playback["release_confirmed"] = False
+            return response
+
+    client = NativeClient(clock, finish=True)
+    result = run_service_checkpoint(
+        client,
+        replace(SPEC, mode=QueueMode.NATIVE),
+        ServiceCheckpointOptions(mode="start", seconds=2, cleanup_stop=True),
+        journal,
+        now=clock.now,
+        wait=clock.wait,
+    )
+    assert result["stop_reason"] == "queue_finished"
+    assert result["items"][0]["finished_at_ms"] is not None
+    assert result["cleanup"] == "stop_observed"
+    assert [x for x in client.calls if x in {"start", "stop"}] == ["start", "stop"]
+
+
+@pytest.mark.parametrize("reason", ["native_successor_pending", "native_reconciliation_required"])
+def test_only_expected_native_transition_allows_temporary_predecessor_ownership_loss(reason):
+    clock, journal = Clock(), Mock()
+
+    class NativeClient(Client):
+        def status(self):
+            response = super().status()
+            view = response["snapshot"]["view"]
+            view["queue"]["mode"] = "native"
+            view["handoff"] = {"reason": reason}
+            if view["playback"]:
+                view["playback"]["ownership_lost"] = True
+            return response
+
+    result = run_service_checkpoint(
+        NativeClient(clock),
+        replace(SPEC, mode=QueueMode.NATIVE),
+        ServiceCheckpointOptions(mode="start", seconds=2),
+        journal,
+        now=clock.now,
+        wait=clock.wait,
+    )
+    assert result["stop_reason"] == (
+        "deadline" if reason == "native_successor_pending" else "ownership_lost"
+    )
 
 
 def test_ack_ticket_and_verified_timing_remain_distinct_without_backdating():

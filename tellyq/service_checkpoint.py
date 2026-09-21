@@ -8,6 +8,7 @@ from time import get_clock_info, monotonic, sleep
 from typing import Literal, Protocol, cast
 from uuid import uuid4
 
+from .domain.queue import QueueMode
 from .domain.values import CommandAction
 from .models import IPCResponse, IPCValue, ServiceCheckpointSummary, ServiceCheckpointTiming
 from .runner import RunnerCommand
@@ -67,6 +68,7 @@ def selected_queue(response: IPCResponse, spec: QueueSpec) -> dict[str, IPCValue
     items = queue.get("items")
     if (
         queue.get("queue_id") != spec.queue_id
+        or queue.get("mode", "legacy") != spec.mode.value
         or target.get("device_id") != spec.target.device_id
         or target.get("route") != spec.target.route
         or not isinstance(items, list)
@@ -306,7 +308,16 @@ class _Checkpoint:
             while self.now() < deadline:
                 response = self.sample()
                 playback = _object(response["snapshot"]["view"]["playback"])
-                if self.options.mode == "start" and playback.get("ownership_lost") is True:
+                handoff = _object(response["snapshot"]["view"].get("handoff"))
+                waiting_native = (
+                    self.spec.mode == QueueMode.NATIVE
+                    and handoff.get("reason") == "native_successor_pending"
+                )
+                if (
+                    self.options.mode == "start"
+                    and playback.get("ownership_lost") is True
+                    and not waiting_native
+                ):
                     self.summary["stop_reason"] = "ownership_lost"
                     break
                 if (
@@ -341,6 +352,15 @@ class _Checkpoint:
                     and playback.get("release_confirmed") is True
                 ):
                     self.summary["stop_reason"] = "queue_finished_and_released"
+                    break
+                if (
+                    self.options.mode == "start"
+                    and self.spec.mode == QueueMode.NATIVE
+                    and all(item["finished_at_ms"] is not None for item in self.summary["items"])
+                ):
+                    # Completion ends collection; opted-in cleanup remains a
+                    # separate explicit STOP and cannot manufacture a finish.
+                    self.summary["stop_reason"] = "queue_finished"
                     break
                 self.wait(min(self.options.poll_seconds, max(0, deadline - self.now())))
         except (Exception, KeyboardInterrupt) as exc:

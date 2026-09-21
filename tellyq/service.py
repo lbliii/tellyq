@@ -5,6 +5,7 @@ import re
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from threading import Event
 from typing import cast
@@ -12,7 +13,7 @@ from uuid import UUID
 
 from .clock import SystemClock
 from .domain.ports import Clock, PlaybackBackend
-from .domain.queue import QueueEntry
+from .domain.queue import QueueEntry, QueueMode
 from .domain.values import ContentKind, ContentRef, PlaybackTarget
 from .models import ServiceReport
 from .playback_task import PlaybackTask
@@ -34,6 +35,7 @@ class QueueSpec:
     target: PlaybackTarget
     items: tuple[QueueEntry, ...]
     legacy_source: Path | None = None
+    mode: QueueMode = QueueMode.LEGACY
 
 
 def _object(
@@ -72,9 +74,11 @@ def load_manifest(path: Path) -> QueueSpec:
     raw = _object(
         json.loads(encoded, object_pairs_hook=_pairs),
         {"schema_version", "queue_id", "target", "items"},
+        {"mode"},
     )
     if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
         raise ValueError("Unsupported queue manifest version.")
+    mode = QueueMode(_text(raw.get("mode", "legacy")))
     target = _object(raw["target"], {"device_id", "route"}, {"name"})
     if target["route"] != "cast":
         raise ValueError("This service currently supports the Cast route.")
@@ -98,7 +102,15 @@ def load_manifest(path: Path) -> QueueSpec:
         )
     if len({item.item_id for item in items}) != len(items):
         raise ValueError("Queue item identities must be unique.")
-    return QueueSpec(_text(raw["queue_id"]), PlaybackTarget(device_id, "cast", name), tuple(items))
+    if mode == QueueMode.NATIVE and any(
+        (before.content.provider, before.content.content_id)
+        == (after.content.provider, after.content.content_id)
+        for before, after in pairwise(items)
+    ):
+        raise ValueError("Native queues cannot disambiguate adjacent identical videos.")
+    return QueueSpec(
+        _text(raw["queue_id"]), PlaybackTarget(device_id, "cast", name), tuple(items), mode=mode
+    )
 
 
 def legacy_spec(runtime: Path, queue_id: str) -> QueueSpec:
@@ -128,14 +140,22 @@ def make_runner(
         else:
             queue = store.load(spec.queue_id)
             if queue is None:
-                queue = store.create(spec.queue_id, spec.target, spec.items)
-            elif queue.target != spec.target or tuple(
-                (item.item_id, item.content) for item in queue.items
-            ) != tuple((item.item_id, item.content) for item in spec.items):
+                queue = store.create(spec.queue_id, spec.target, spec.items, mode=spec.mode)
+            elif (
+                queue.mode != spec.mode
+                or queue.target != spec.target
+                or tuple((item.item_id, item.content) for item in queue.items)
+                != tuple((item.item_id, item.content) for item in spec.items)
+            ):
                 raise ValueError("Existing queue identity describes different work.")
         if queue.target != spec.target:
             raise ValueError("Imported target changed; reopen the explicit source.")
-        return PlaybackTask(
+        task_class = PlaybackTask
+        if spec.mode == QueueMode.NATIVE:
+            from .native_task import NativePlaybackTask
+
+            task_class = NativePlaybackTask
+        return task_class(
             lambda: backend_factory(spec.target, clock),
             store,
             JsonSessionStore(runtime, clock),
