@@ -1,5 +1,9 @@
 # M2 execution plan: observe endings, then run a queue
 
+M2 is now closed with the known enqueue-stall limitation. This document preserves
+the execution history; see the [aggregate closeout](M2-ACCEPTANCE.md) for delivered
+capabilities, all four recent session attempts and the open follow-up defect.
+
 Started 2026-09-21 from `main` at `8a480ea`, after the M1 acceptance record merged.
 M1 passed on code commit `71a3c39`; its verified start/status/stop behavior is the
 regression baseline. M2 adds a reliable unattended YouTube queue, in two stages.

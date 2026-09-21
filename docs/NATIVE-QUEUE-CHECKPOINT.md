@@ -2,14 +2,15 @@
 
 This is the historical prototype record. The subsequent foreground integration
 and merged hardware results are in [NATIVE-RUNNER-CHECKPOINT.md](NATIVE-RUNNER-CHECKPOINT.md).
+Current milestone status is the [qualified M2 closeout](M2-ACCEPTANCE.md).
 
 The supervised prototype observed two A-to-B receiver transitions after
 `play_next(B)`, including one clean repetition without queue readback. A completed
 under the existing ordered-history policy; ads followed; then exact B identity
 and advancing non-ad positions qualified B playback. This is evidence for a
-native YouTube successor experiment. **M2 remains open:** the foreground service
-has not integrated or recovery-validated native queue ownership, and the three
-three-item sessions with six correct handoffs have not been performed.
+native YouTube successor experiment. **M2 remained open at this prototype stage:**
+the foreground service had not integrated or recovery-validated native queue
+ownership, and the three three-item sessions had not yet been performed.
 
 ## Scope and versions
 

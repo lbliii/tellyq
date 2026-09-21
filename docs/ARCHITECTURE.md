@@ -25,10 +25,13 @@ intent/history remains separate from current playback evidence.
 
 The [M2b components](M2B-PLAN.md) merged at `9715b58`: pure queue decisions, durable
 dispatch and a persistent owner/mailbox. The [foreground composition](FOREGROUND-SERVICE.md)
-connects a concrete playback task, private IPC and CLI clients. Internal RELEASE
-journals cleanup separately from operator cancellation, and a successor still
-requires fresh idle and retained authority. A restarted owner cannot restore live
-evidence from durable history. M2b hardware acceptance remains pending. Milo/MCP,
+connects a concrete playback task, private IPC and CLI clients. The legacy route's
+internal RELEASE journals cleanup separately from cancellation and requires fresh
+idle and retained authority before starting a successor. The opt-in
+[native runner](NATIVE-QUEUE-RUNNER.md) instead stages one authorized YouTube
+successor and verifies its receiver-managed playback before adoption. A restarted
+owner cannot restore live evidence from durable history. [M2 is closed with a
+known enqueue-stall limitation](M2-ACCEPTANCE.md). Milo/MCP is the next milestone;
 Chirp and a `src/` layout remain later work.
 
 ## Design decision

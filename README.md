@@ -4,6 +4,14 @@ A personal TV programmer: describe a mood, then let Cueby, your TV-programming c
 
 TellyQ is the app; Cueby is its companion.
 
+**M2 is closed with a known reliability limitation.** The local Python 3.14
+controller now supports an explicit YouTube lineup, verified native handoffs,
+start/status/pause/resume/stop, durable history and bounded reconnect recovery.
+Three of four recent three-item attempts completed. The intermittent enqueue
+stall remains open as [issue #42](https://github.com/lbliii/tellyq/issues/42).
+See the [M2 closeout](docs/M2-ACCEPTANCE.md) for the complete evidence and limits.
+M3's Milo/MCP interface is next; it has not yet been implemented.
+
 ## First playback proof (M0)
 
 Queue and start one real program on the living-room Chromecast through software commands, then verify playback and stop control.
@@ -60,8 +68,8 @@ queue handoffs, merged at `b4ff7d3` with 965 passing offline tests. The
 [foreground-service checkpoint](docs/M2B-CHECKPOINT.md) verified playback, durable
 natural completion, cancellation, stop and a status-only reopen. The successor
 held, and one active-stop measurement took 10.431 seconds against a ten-second
-target. M2b remains open; the [closing workstreams](docs/M2B-PLAN.md#closing-workstreams)
-address diagnostics, responsiveness and recovery acceptance. Earlier unexplained
+target. The subsequent [closing workstreams](docs/M2B-PLAN.md#closing-workstreams)
+addressed diagnostics, responsiveness and recovery acceptance. Earlier unexplained
 YouTube code-5/reset behavior retains its protective hold.
 
 Read [the MVP plan](docs/MVP.md) and [research notes](docs/RESEARCH.md) before implementation. An example one-item queue is in [examples/queue.json](examples/queue.json).
@@ -74,8 +82,9 @@ manifests retain legacy behavior. The [merged-runner checkpoint](docs/NATIVE-RUN
 passed one three-item sequence, active stop and reconnect, but a second sequence
 held after its middle item. A subsequent [enqueue investigation](docs/ENQUEUE-INVESTIGATION.md)
 passed repeated and distinct three-item comparisons with four more verified
-handoffs, but did not reproduce or explain the stall. M2 remains open pending
-repeatable handoffs. The examples use quiet nature clips; the user confirmed
+handoffs, but did not reproduce or explain the stall. Those successes count in the
+[qualified M2 closeout](docs/M2-ACCEPTANCE.md); the stall remains an open defect.
+The examples use quiet nature clips; the user confirmed
 visible advancement and audible nature sound in the distinct-video investigation.
 
 For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and

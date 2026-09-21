@@ -1,8 +1,10 @@
 # M2 native YouTube queue integration
 
-Planning baseline: `39c4ed0`, 2026-09-21. The isolated hardware experiment has
-demonstrated an alternative to exiting YouTube between programs. This plan does
-not mark the foreground runner or M2 accepted.
+Historical planning baseline: `39c4ed0`, 2026-09-21. The isolated hardware experiment
+demonstrated an alternative to exiting YouTube between programs. Implementation
+and subsequent evidence are now summarized in the [M2 closeout](M2-ACCEPTANCE.md):
+M2 is closed with the intermittent enqueue stall retained as an open defect. The
+plan below preserves the original scope and is not a new list of pending work.
 
 ## Evidence and selected route
 
@@ -71,10 +73,10 @@ All branches start directly from the baseline and target `main`.
 
 ## Foreground integration
 
-The capability and replay foundations have landed. The next implementation batch
-adds durable reservations, passive observation and the opt-in
-[foreground native runner](NATIVE-QUEUE-RUNNER.md), with offline validation before
-the hardware gates below. This does not mark M2 accepted.
+The capability, replay foundations, durable reservations, passive observation and
+opt-in [foreground native runner](NATIVE-QUEUE-RUNNER.md) have landed. The sections
+below preserve their implementation requirements; current aggregate acceptance
+and remaining limits are in the closeout record.
 
 ### Durable reservation and dispatch
 

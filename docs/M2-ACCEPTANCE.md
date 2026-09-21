@@ -1,28 +1,68 @@
-# M2 service acceptance and recovery
+# M2 closeout, service acceptance and recovery
 
-**Live M2 acceptance remains pending.** Synthetic tests establish conservative
-service recovery and local command handling. They do not prove Chromecast handoffs,
-TV visibility, live stop latency, or provider behavior. The previous service
-checkpoint and its 10.43117-second client-visible stop measurement are preserved
-in [M2B-CHECKPOINT.md](M2B-CHECKPOINT.md).
+**M2 is closed with a known reliability limitation, by user approval on
+2026-09-21.** The implemented YouTube queue, controls, persistence and recovery
+are delivered. The intermittent acknowledged enqueue stall remains open as
+[issue #42](https://github.com/lbliii/tellyq/issues/42). This is a qualified
+milestone closeout, not a claim that the defect is fixed or that dependable
+unattended use has been established. M3's Milo/MCP work may proceed.
 
-The later [native-runner checkpoint](NATIVE-RUNNER-CHECKPOINT.md) at `28d043d`
-passed one three-item sequence, active cancellation and process-loss recovery.
-A second sequence stalled after its middle item despite acknowledged enqueue;
-the required repeated-session gate remains unmet. That record preserves the
-failed attempt and separates the checkpoint script's exit-code reporting fix.
-The [enqueue investigation](ENQUEUE-INVESTIGATION.md) subsequently passed two
-instrumented comparisons (four handoffs) at `b0e32b1`, including visual advancement
-and audible nature sound confirmed for the distinct-video run. The intermittent
-failure is still unresolved; these comparisons are not a replacement acceptance
-batch.
+## Aggregate evidence and scope decision
 
-The remaining live gate is three three-item sessions with six correct automatic
-handoffs, no duplicate starts, verified pause/resume, cancellation preventing the
-next item, verified active stop, and restart recovery without replay. Verify the
-intended TV visually and record that evidence separately. Acknowledgement,
-completion of a local ticket, receiver observation, and human observation are four
-different facts.
+The [native-runner checkpoint](NATIVE-RUNNER-CHECKPOINT.md) at `28d043d` contains
+one completed three-item session and one stalled session. The
+[enqueue investigation](ENQUEUE-INVESTIGATION.md) at `b0e32b1` adds two completed
+three-item sessions. Production playback code is identical between those
+revisions; changes were documentation, checkpoint-driver exit reporting and its
+tests. The later runs add response-only logging, with no extra provider requests
+or playback commands. Logging can affect timing, which remains a stated limit.
+
+The combined record is **three successful three-item sessions out of four
+attempts: seven verified handoffs out of eight planned**. Six of those handoffs
+belong to the three completed sessions; the stalled session contributes one
+successful handoff and one failure. No failures are removed from the record.
+
+The original milestone required three completed sessions, but did not require
+them in one new batch or forbid diagnostic logging. The earlier statement that
+the two later comparisons could not count was too restrictive and is superseded
+by this aggregate assessment. It does not dismiss the intermittent reliability
+defect. New event readers, authoritative playlist readback and exhaustive provider
+investigation are not additional M2 exit requirements.
+
+| Original area | Delivered evidence | Remaining limit |
+| --- | --- | --- |
+| Natural completion and advancement | M2a observed three endings across two titles; the composed native runner completed three three-item sessions across the four-attempt record | One acknowledged successor did not play; issue #42 remains open |
+| Controls | Pause/resume verified in a completed native session; active cancellation with a successor staged prevented its playback during a 110.304-second watch; observed active stop took 4.261 seconds | A bounded observation window does not prove an empty remote playlist or disabled autoplay |
+| Recovery and no duplicate dispatch | Offline crash-boundary coverage; live owner loss followed by fresh approved-successor reconciliation, with unchanged command/operation history; one initial START per native trial | A missed predecessor ending stays unknown and further staging holds; no remote exactly-once guarantee |
+| Human confirmation | Earlier visible pause/resume and cleanup; latest distinct-video run had user-confirmed advancement and audible nature sound | Separate visual confirmation was not recorded for every transition in every run |
+| Engineering checks | Tested `b0e32b1` passed 1,355 offline tests, Ruff, formatting and ty; investigation PR #41 passed macOS/Linux CI including build/install checks | Automated tests do not substitute for live provider evidence |
+
+The earlier service checkpoint and its 10.43117-second client-visible stop miss
+remain in [M2B-CHECKPOINT.md](M2B-CHECKPOINT.md). Later stops do not erase that
+measurement. Known ad, takeover, readback and receiver-autoplay limits remain in
+the linked records. Acknowledgement, local ticket completion, receiver observation
+and human observation continue to be distinct facts.
+
+## Delivered behavior and follow-up boundary
+
+The opt-in native runner accepts an explicit queue of YouTube IDs, starts the
+first item, stages at most one approved successor and verifies observed playback
+before adopting it. A persistent Python 3.14 owner serves local start/status/pause/
+resume/stop commands and persists queue and effect history. Status and recovery
+do not blindly replay effects. One previously approved successor may continue
+after disconnection; reopening reconciles it while holding further staging.
+
+Native mode remains explicit; legacy manifests retain their existing behavior.
+Adjacent identical IDs are declined. The controller does not infer completion
+from duration or treat a successful enqueue as playback. Unexpected content or
+lost ownership prevents adoption and unsafe control.
+
+Further investigation of issue #42 is bounded bug work, not a new milestone
+feature or a prerequisite to building M3. M3 should expose the existing outcomes,
+holds and uncertainties through Milo/MCP without changing playback policy.
+Broader reliability validation remains in M8; M2 closure does not satisfy that
+personal-release gate. No additional live test was run for this documentation
+closeout, and the detailed historical records below remain intact.
 
 ## Offline process-loss coverage
 
