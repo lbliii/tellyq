@@ -66,6 +66,11 @@ def _ad_break(status: object) -> bool | None:
     return None
 
 
+def _pause_supported(status: object) -> bool | None:
+    commands = _integer(_field(status, "supportedMediaCommands"))
+    return bool(commands & 1) if commands is not None and commands >= 0 else None
+
+
 def media_observation(data: object) -> Observation:
     """Extract the first media status, preserving missing or invalid fields."""
     statuses = _field(data, "status")
@@ -88,6 +93,7 @@ def media_observation(data: object) -> Observation:
         "duration": _seconds(_field(media, "duration")),
         "idle_reason": _choice(_field(status, "idleReason"), _IDLE_REASONS),
         "ad_break": _ad_break(status),
+        "pause_supported": _pause_supported(status),
     }
 
 

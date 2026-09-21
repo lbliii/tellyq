@@ -4,12 +4,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from math import isfinite
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from .domain.ports import Clock
 from .domain.values import (
+    CapabilityEvidence,
     CommandAction,
     CommandOutcome,
     CommandReceipt,
@@ -23,6 +24,7 @@ from .domain.values import (
     PlaybackScope,
     PlaybackTarget,
     PlayerState,
+    Support,
 )
 from .models import Device, Observation
 
@@ -54,6 +56,13 @@ class CastTransport(Protocol):
     def quit(self) -> None: ...
 
 
+@runtime_checkable
+class CastControls(Protocol):
+    def control(
+        self, scope: PlaybackScope, playback_id: str, action: CommandAction
+    ) -> bool | None: ...
+
+
 class CastBackend:
     def __init__(
         self,
@@ -61,11 +70,14 @@ class CastBackend:
         target: PlaybackTarget,
         clock: Clock,
         seconds: float = 30,
+        *,
+        read_only: bool = False,
     ) -> None:
         self.transport = transport
         self.target = target
         self.clock = clock
         self.seconds = seconds
+        self._read_only = read_only
         self.generation = str(uuid4())
         self.raw_observations: list[Observation] = []
         self._sequence = 0
@@ -79,11 +91,108 @@ class CastBackend:
         if target != self.target:
             raise ValueError("The backend is bound to a different target.")
 
+    @property
+    def read_only(self) -> bool:
+        return self._read_only
+
+    def _allows_effects(self) -> bool:
+        return not self.read_only
+
     def capabilities(self, target: PlaybackTarget) -> PlaybackCapabilities:
         self._target(target)
-        # The transport supports commands, but this is not verified hardware capability.
-        # In particular, Cast does not supply a verified no-ad or natural-end signal.
-        return PlaybackCapabilities()
+        media = self._media
+        if (
+            not isinstance(self.transport, CastControls)
+            or media is None
+            or media.content is None
+            or not 0 <= self.clock.monotonic() - media.monotonic <= 5
+            or media.pause_supported is None
+        ):
+            return PlaybackCapabilities()
+        pause = CapabilityEvidence(
+            Support.ADVERTISED if media.pause_supported else Support.UNSUPPORTED,
+            "Cast supportedMediaCommands PAUSE bit (receiver advertisement, not live proof)",
+            media.observed_at,
+        )
+        # PLAY is Cast's standard resume command. Restrict this route to a fresh
+        # PAUSED session whose receiver also advertises pause, not an app launch.
+        resume = (
+            CapabilityEvidence(
+                pause.support, "Cast PAUSED media with PAUSE support; PLAY route", media.observed_at
+            )
+            if media.state == PlayerState.PAUSED
+            else CapabilityEvidence()
+        )
+        return PlaybackCapabilities(pause=pause, resume=resume)
+
+    def pause(self, scope: PlaybackScope, playback_id: str) -> CommandReceipt:
+        return self._control(scope, playback_id, CommandAction.PAUSE)
+
+    def resume(self, scope: PlaybackScope, playback_id: str) -> CommandReceipt:
+        return self._control(scope, playback_id, CommandAction.RESUME)
+
+    def _control(
+        self, scope: PlaybackScope, playback_id: str, action: CommandAction
+    ) -> CommandReceipt:
+        self._target(scope.request.target)
+        receiver, media = self._receiver, self._media
+        now = self.clock.monotonic()
+        expected = PlayerState.PLAYING if action == CommandAction.PAUSE else PlayerState.PAUSED
+        if (
+            not self._allows_effects()
+            or not isinstance(self.transport, CastControls)
+            or receiver is None
+            or media is None
+            or scope.connection_generation != self.generation
+            or media.connection_generation != self.generation
+            or receiver.get("app_id") != scope.application_id
+            or receiver.get("app_session_id") != scope.session_id
+            or media.application_id != scope.application_id
+            or media.session_id != scope.session_id
+            or media.content != scope.request.content
+            or media.playback_id != playback_id
+            or media.state != expected
+            or media.pause_supported is not True
+            or not 0 <= now - media.monotonic <= 5
+            or not 0 <= now - receiver.get("monotonic", float("-inf")) <= 5
+            or any(
+                event.monotonic > scope.started_monotonic
+                and (
+                    (event.session_id is not None and event.session_id != scope.session_id)
+                    or (
+                        event.application_id is not None
+                        and event.application_id != scope.application_id
+                    )
+                    or (event.content is not None and event.content != scope.request.content)
+                )
+                for event in self._identity_history
+            )
+        ):
+            return self._receipt(scope.request, action, CommandOutcome.REJECTED)
+        self._window = 6
+        try:
+            accepted = self.transport.control(scope, playback_id, action)
+        except Exception, KeyboardInterrupt:
+            error = PlaybackError(
+                ErrorCode.COMMAND_OUTCOME_UNKNOWN,
+                "Cast media control outcome is unknown.",
+                scope.request.request_id,
+                True,
+                "Inspect fresh status before retrying.",
+            )
+            return self._receipt(scope.request, action, CommandOutcome.UNKNOWN, error)
+        if accepted is None:
+            error = PlaybackError(
+                ErrorCode.COMMAND_OUTCOME_UNKNOWN,
+                "Cast media control response is inconclusive.",
+                scope.request.request_id,
+                True,
+                "Inspect fresh status before retrying.",
+            )
+            return self._receipt(scope.request, action, CommandOutcome.UNKNOWN, error)
+        return self._receipt(
+            scope.request, action, CommandOutcome.ACCEPTED if accepted else CommandOutcome.REJECTED
+        )
 
     def _receipt(
         self,
@@ -98,6 +207,8 @@ class CastBackend:
 
     def start(self, request: PlaybackRequest) -> CommandReceipt:
         self._target(request.target)
+        if not self._allows_effects():
+            return self._receipt(request, CommandAction.START, CommandOutcome.REJECTED)
         if request.content.provider != "youtube":
             return self._receipt(request, CommandAction.START, CommandOutcome.REJECTED)
         self._window = self.seconds
@@ -116,6 +227,8 @@ class CastBackend:
 
     def stop(self, scope: PlaybackScope) -> CommandReceipt:
         self._target(scope.request.target)
+        if not self._allows_effects():
+            return self._receipt(scope.request, CommandAction.STOP, CommandOutcome.REJECTED)
         receiver = self._receiver
         now = self.clock.monotonic()
         if (
@@ -266,13 +379,14 @@ class CastBackend:
             position=event.get("position"),
             duration=event.get("duration"),
             ad_active=event.get("ad_break"),
+            pause_supported=event.get("pause_supported"),
             idle_reason=reasons.get(event.get("idle_reason") or ""),
             source="cast_media",
         )
         if self._media is not None and observation.monotonic <= self._media.monotonic:
             return None
-        if observation.content is not None:
-            self._media = observation
+        # Missing identity/support must retire cached permission to control.
+        self._media = observation
         return observation
 
 
@@ -289,17 +403,25 @@ class _Transport:
     def quit(self) -> None:
         self.connection.cast.quit_app(timeout=10)
 
+    def control(self, scope: PlaybackScope, playback_id: str, action: CommandAction) -> bool | None:
+        return self.connection.control(scope, playback_id, action)
+
 
 @contextmanager
 def open_backend(
     target: PlaybackTarget,
     clock: Clock,
     seconds: float,
+    *,
+    read_only: bool = False,
 ) -> Iterator[tuple[CastBackend, Device]]:
     from .cast import connect
 
     with connect(target.device_id) as (connection, device):
-        yield CastBackend(_Transport(connection), target, clock, seconds), device
+        yield (
+            CastBackend(_Transport(connection), target, clock, seconds, read_only=read_only),
+            device,
+        )
 
 
 def discover_devices() -> list[Device]:

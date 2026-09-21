@@ -1,7 +1,7 @@
 """Small structural contracts; implementations own I/O and thread safety."""
 
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from .values import (
     CommandReceipt,
@@ -42,6 +42,15 @@ class PlaybackBackend(Protocol):
     def stop(self, scope: PlaybackScope) -> CommandReceipt:
         """Stop only the caller's still-owned session; refuse a replacement."""
         ...
+
+
+@runtime_checkable
+class PlaybackControls(Protocol):
+    """Optional controls, scoped to explicit media identity; never launch content."""
+
+    def pause(self, scope: PlaybackScope, playback_id: str) -> CommandReceipt: ...
+
+    def resume(self, scope: PlaybackScope, playback_id: str) -> CommandReceipt: ...
 
 
 class RevisionConflict(Exception):
