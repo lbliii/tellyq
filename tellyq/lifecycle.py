@@ -31,7 +31,37 @@ from .domain.values import (
     SessionSnapshot,
     require_instant,
 )
-from .models import Evidence, LifecycleRecord, Observation
+from .models import (
+    Evidence,
+    LifecycleInspection,
+    LifecycleRecord,
+    Observation,
+    WireFieldShape,
+)
+
+_WIRE_FIELDS = (
+    "wire_media",
+    "wire_media_content_id",
+    "wire_extended_status",
+    "wire_extended_media",
+    "wire_extended_content_id",
+    "wire_break_status",
+    "wire_break_id",
+    "wire_break_clip_id",
+    "wire_break_time",
+    "wire_break_clip_time",
+    "wire_status_custom_data",
+    "wire_media_custom_data",
+    "wire_extended_media_custom_data",
+    "wire_media_breaks",
+    "wire_media_break_clips",
+    "wire_current_item_id",
+    "wire_loading_item_id",
+    "wire_preloaded_item_id",
+)
+_WIRE_SHAPES: dict[str, WireFieldShape] = {
+    value: value for value in ("absent", "null", "valid", "invalid", "unavailable")
+}
 
 
 class LifecycleBackend(Protocol):
@@ -309,6 +339,15 @@ class CaptureSanitizer:
             if isinstance(kind, str) and kind in {"receiver", "media", "error"}
             else "unknown"
         }
+        for key in _WIRE_FIELDS:
+            shape = raw.get(key)
+            if isinstance(shape, str) and shape in _WIRE_SHAPES:
+                result[key] = _WIRE_SHAPES[shape]
+        count = raw.get("wire_status_count")
+        if type(count) is int and 0 <= count <= 65_536:
+            result["wire_status_count"] = count
+        elif "wire_status_count" in raw:
+            result["wire_status_count"] = None
         for key in ("position", "duration"):
             if key in raw:
                 result[key] = _number(raw[key])
@@ -520,6 +559,81 @@ def export_capture(source: Path, destination: Path) -> None:
     with JsonlJournal(destination) as sink:
         for value in _read_records(source):
             sink.write(sanitizer.record(value))
+
+
+def inspect_capture(source: Path) -> LifecycleInspection:
+    """Count terminal candidates and their missing fields without carrying identity.
+
+    This deliberately does not assign an anonymous terminal to preceding content,
+    even if its media-session ID matches. Partial windows remain counted as
+    diagnostics, visibly separate from any replay/acceptance decision.
+    """
+    sanitizer = CaptureSanitizer()
+    requested: str | None = None
+    result: LifecycleInspection = {
+        "schema_version": 1,
+        "provenance": "synthetic",
+        "end_record_present": False,
+        "stop_reason": None,
+        "windows": 0,
+        "partial_windows": 0,
+        "media_observations": 0,
+        "wire_diagnostic_observations": 0,
+        "wire_fields": {},
+        "terminal_candidates": 0,
+        "partial_terminal_candidates": 0,
+        "terminal_content": {"requested": 0, "other": 0, "unknown": 0},
+        "terminal_ad": {"active": 0, "inactive": 0, "unknown": 0},
+        "terminal_wire_diagnostics": 0,
+        "terminal_wire_fields": {},
+        "new_hardware_evidence": False,
+    }
+    for raw in _read_records(source):
+        record = sanitizer.record(raw)
+        if record["kind"] == "begin":
+            requested = record.get("requested_content_id")
+            if requested is None:
+                raise ValueError("Inspection needs an explicit requested content.")
+            result["provenance"] = (
+                "synthetic" if record["provenance"] == "synthetic" else "sanitized-live"
+            )
+        if record["kind"] == "end":
+            result["end_record_present"] = True
+            result["stop_reason"] = record.get("stop_reason")
+        if record["kind"] != "window":
+            continue
+        result["windows"] += 1
+        result["partial_windows"] += int(record.get("partial", False))
+        for event in record.get("observations", []):
+            if event["kind"] != "media":
+                continue
+            result["media_observations"] += 1
+            result["wire_diagnostic_observations"] += int("wire_status_count" in event)
+            _count_wire_fields(event, result["wire_fields"])
+            if event.get("player_state") != "IDLE" or event.get("idle_reason") != "FINISHED":
+                continue
+            result["terminal_candidates"] += 1
+            result["partial_terminal_candidates"] += int(record.get("partial", False))
+            content = event.get("content_id")
+            result["terminal_content"][
+                "unknown" if content is None else "requested" if content == requested else "other"
+            ] += 1
+            ad = event.get("ad_break")
+            result["terminal_ad"]["unknown" if ad is None else "active" if ad else "inactive"] += 1
+            result["terminal_wire_diagnostics"] += int("wire_status_count" in event)
+            _count_wire_fields(event, result["terminal_wire_fields"])
+    if requested is None:
+        raise ValueError("Inspection needs a begin record.")
+    return result
+
+
+def _count_wire_fields(event: Observation, fields: dict[str, dict[WireFieldShape, int]]) -> None:
+    for key in sorted(_WIRE_FIELDS):
+        shape = event.get(key)
+        if isinstance(shape, str) and shape in _WIRE_SHAPES:
+            counts = fields.setdefault(key, {})
+            value = _WIRE_SHAPES[shape]
+            counts[value] = counts.get(value, 0) + 1
 
 
 def _read_records(source: Path) -> Iterable[Mapping[str, object]]:

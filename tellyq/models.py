@@ -6,6 +6,32 @@ reasons. Snapshot records store durable identity, never process-local evidence.
 
 from typing import Literal, NotRequired, Required, TypedDict
 
+type WireFieldShape = Literal["absent", "null", "valid", "invalid", "unavailable"]
+
+
+class MediaWireDiagnostics(TypedDict, total=False):
+    """Fixed field-shape allowlist; never arbitrary keys, values or prior status."""
+
+    wire_status_count: int | None
+    wire_media: WireFieldShape
+    wire_media_content_id: WireFieldShape
+    wire_extended_status: WireFieldShape
+    wire_extended_media: WireFieldShape
+    wire_extended_content_id: WireFieldShape
+    wire_break_status: WireFieldShape
+    wire_break_id: WireFieldShape
+    wire_break_clip_id: WireFieldShape
+    wire_break_time: WireFieldShape
+    wire_break_clip_time: WireFieldShape
+    wire_status_custom_data: WireFieldShape
+    wire_media_custom_data: WireFieldShape
+    wire_extended_media_custom_data: WireFieldShape
+    wire_media_breaks: WireFieldShape
+    wire_media_break_clips: WireFieldShape
+    wire_current_item_id: WireFieldShape
+    wire_loading_item_id: WireFieldShape
+    wire_preloaded_item_id: WireFieldShape
+
 
 class Device(TypedDict):
     uuid: str
@@ -14,7 +40,7 @@ class Device(TypedDict):
     type: NotRequired[str | None]
 
 
-class Observation(TypedDict, total=False):
+class Observation(MediaWireDiagnostics, total=False):
     kind: Required[str]
     playback_id: str | None
     sequence: int
@@ -145,3 +171,24 @@ class LifecycleRecord(Report):
     gap_seconds: NotRequired[float]
     gap_kind: NotRequired[Literal["transport", "media"]]
     stop_reason: NotRequired[Literal["deadline", "interrupted", "backend_error", "cancelled"]]
+
+
+class LifecycleInspection(TypedDict):
+    """Identity-free counts for diagnostic review, never completion authorization."""
+
+    schema_version: Literal[1]
+    provenance: Literal["synthetic", "sanitized-live"]
+    end_record_present: bool
+    stop_reason: Literal["deadline", "interrupted", "backend_error", "cancelled"] | None
+    windows: int
+    partial_windows: int
+    media_observations: int
+    wire_diagnostic_observations: int
+    wire_fields: dict[str, dict[WireFieldShape, int]]
+    terminal_candidates: int
+    partial_terminal_candidates: int
+    terminal_content: dict[Literal["requested", "other", "unknown"], int]
+    terminal_ad: dict[Literal["active", "inactive", "unknown"], int]
+    terminal_wire_diagnostics: int
+    terminal_wire_fields: dict[str, dict[WireFieldShape, int]]
+    new_hardware_evidence: Literal[False]

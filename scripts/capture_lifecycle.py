@@ -8,7 +8,13 @@ from uuid import UUID
 
 from tellyq.clock import SystemClock
 from tellyq.domain.values import ContentRef, PlaybackTarget
-from tellyq.lifecycle import JsonlJournal, capture_lifecycle, export_capture, replay_capture
+from tellyq.lifecycle import (
+    JsonlJournal,
+    capture_lifecycle,
+    export_capture,
+    inspect_capture,
+    replay_capture,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     replay.add_argument("source", type=Path)
     replay.add_argument("destination", type=Path)
+    inspect = commands.add_parser(
+        "inspect", help="Count terminal candidates and wire field shapes offline; no identifiers"
+    )
+    inspect.add_argument("source", type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "sanitize":
@@ -42,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "replay":
             replay_capture(args.source, args.destination)
             print(json.dumps({"replayed": True, "new_hardware_evidence": False}))
+            return 0
+        if args.command == "inspect":
+            print(json.dumps(inspect_capture(args.source), allow_nan=False))
             return 0
         if not args.output.resolve().is_relative_to(Path("runtime").resolve()):
             parser.error("Capture output must be under runtime/.")

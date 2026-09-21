@@ -502,6 +502,81 @@ def test_extended_media_is_used_only_when_primary_media_is_absent():
         assert event["content_id"] is None
 
 
+def test_wire_shapes_distinguish_omission_null_invalid_and_unused_fallback():
+    event = media_observation(
+        {
+            "status": [
+                {
+                    "media": {"contentId": 42, "breaks": [], "breakClips": None},
+                    "extendedStatus": {"media": {"contentId": "unused-private-content"}},
+                    "breakStatus": {"breakId": None, "currentBreakTime": True},
+                    "currentItemId": 5,
+                    "loadingItemId": False,
+                    "preloadedItemId": None,
+                },
+                {"media": {"contentId": "unselected-private-content"}},
+            ]
+        }
+    )
+    assert event["wire_status_count"] == 2
+    assert event["wire_media"] == "valid"
+    assert event["wire_media_content_id"] == "invalid"
+    assert event["wire_extended_content_id"] == "valid"
+    assert event["wire_media_breaks"] == "valid"
+    assert event["wire_media_break_clips"] == "null"
+    assert event["wire_break_status"] == "valid"
+    assert event["wire_break_id"] == "null"
+    assert event["wire_break_clip_id"] == "absent"
+    assert event["wire_break_time"] == "invalid"
+    assert event["wire_current_item_id"] == "valid"
+    assert event["wire_loading_item_id"] == "invalid"
+    assert event["wire_preloaded_item_id"] == "null"
+    assert event["content_id"] is None  # Diagnostics cannot change identity policy.
+    assert event["ad_break"] is None
+    assert "private-content" not in json.dumps(event)
+
+
+def test_wire_shapes_are_current_message_only_and_never_copy_custom_payload():
+    events: Queue[Observation] = Queue()
+    observer = Observer(MEDIA, events)
+    observer.receive_message(
+        None,
+        {
+            "type": "MEDIA_STATUS",
+            "status": [
+                {
+                    "customData": {"SECRET-token": "SECRET-credential"},
+                    "media": {"contentId": "synthetic", "customData": {"SECRET": "SECRET"}},
+                    "breakStatus": {"breakClipId": "SECRET-ad-id"},
+                }
+            ],
+        },
+    )
+    first = events.get_nowait()
+    assert first["wire_status_custom_data"] == "valid"
+    assert first["wire_media_custom_data"] == "valid"
+    assert first["wire_break_clip_id"] == "valid" and first["ad_break"] is True
+    assert "SECRET" not in json.dumps(first)
+    observer.receive_message(
+        None,
+        {"type": "MEDIA_STATUS", "status": [{"playerState": "IDLE", "idleReason": "FINISHED"}]},
+    )
+    terminal = events.get_nowait()
+    assert terminal["wire_media"] == "absent"
+    assert terminal["wire_media_content_id"] == "unavailable"
+    assert terminal["wire_break_status"] == "absent"
+    assert terminal["wire_break_clip_id"] == "unavailable"
+    assert terminal["wire_status_custom_data"] == "absent"
+    assert terminal["content_id"] is None and terminal["ad_break"] is None
+
+
+@pytest.mark.parametrize("value,shape", [(None, "null"), ([], "invalid"), ({}, "valid")])
+def test_wire_break_container_shape_does_not_establish_inactive_ads(value, shape):
+    event = media_observation({"status": [{"breakStatus": value}]})
+    assert event["wire_break_status"] == shape
+    assert event["ad_break"] is None
+
+
 @pytest.mark.parametrize(
     "value",
     [None, False, {}, [], {"breakId": []}, {"currentBreakTime": True}, {"whenSkippable": 5}],
