@@ -8,6 +8,15 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
+from .domain.native_queue import (
+    NativeQueueAction,
+    NativeQueueCapabilities,
+    NativeQueueDiagnostic,
+    NativeQueueReason,
+    NativeQueueReceipt,
+    NativeQueueRequest,
+    NativeQueueResponse,
+)
 from .domain.ports import Clock
 from .domain.values import (
     CapabilityEvidence,
@@ -33,7 +42,7 @@ from .domain.values import (
     Support,
 )
 from .models import Device, Observation
-from .youtube_state import interpret_player_state
+from .youtube_state import YOUTUBE_APPLICATION_ID, interpret_player_state
 
 if TYPE_CHECKING:
     from .cast import Connection
@@ -92,6 +101,13 @@ class CastControls(Protocol):
     ) -> ControlResponse | bool | None: ...
 
 
+@runtime_checkable
+class CastNativeQueueTransport(Protocol):
+    """Optional one-mutation route, requiring an already initialized session."""
+
+    def native_queue(self, request: NativeQueueRequest) -> NativeQueueResponse: ...
+
+
 class CastBackend:
     def __init__(
         self,
@@ -128,6 +144,115 @@ class CastBackend:
 
     def _allows_effects(self) -> bool:
         return not self.read_only
+
+    def native_queue_capabilities(self, target: PlaybackTarget) -> NativeQueueCapabilities:
+        """Advertise callable routes only; neither route implies live queue proof."""
+        self._target(target)
+        if not self._allows_effects() or not isinstance(self.transport, CastNativeQueueTransport):
+            return NativeQueueCapabilities()
+        return NativeQueueCapabilities(
+            play_next=CapabilityEvidence(
+                Support.ADVERTISED,
+                "Optional guarded YouTube play_next route; not queue membership or playback proof",
+                self.clock.utcnow(),
+            ),
+            clear=CapabilityEvidence(
+                Support.ADVERTISED,
+                "Optional guarded YouTube clear_playlist route; not empty-queue or stop proof",
+                self.clock.utcnow(),
+            ),
+        )
+
+    def _native_queue_guard(self, request: NativeQueueRequest) -> NativeQueueReason | None:
+        scope = request.scope
+        receiver, media = self._receiver, self._media
+        now = self.clock.monotonic()
+        if not self._allows_effects():
+            return NativeQueueReason.READ_ONLY
+        if not isinstance(self.transport, CastNativeQueueTransport):
+            return NativeQueueReason.CAPABILITY_UNAVAILABLE
+        if (
+            scope.request.target.route != "cast"
+            or scope.request.content.provider != "youtube"
+            or scope.application_id != YOUTUBE_APPLICATION_ID
+            or (request.successor is not None and request.successor.provider != "youtube")
+        ):
+            return NativeQueueReason.PROVIDER_MISMATCH
+        if scope.connection_generation != self.generation:
+            return NativeQueueReason.CONNECTION_CHANGED
+        if receiver is None or media is None or media.identity_update != IdentityUpdate.EXPLICIT:
+            return NativeQueueReason.MEDIA_UNAVAILABLE
+        if media.connection_generation != self.generation:
+            return NativeQueueReason.CONNECTION_CHANGED
+        if (
+            receiver.get("app_id") != scope.application_id
+            or receiver.get("app_session_id") != scope.session_id
+            or receiver.get("app_name") != "YouTube"
+            or media.application_id != scope.application_id
+            or media.session_id != scope.session_id
+            or media.content != scope.request.content
+            or media.playback_id != request.playback_id
+            or any(
+                event.monotonic > scope.started_monotonic
+                and (
+                    (event.session_id is not None and event.session_id != scope.session_id)
+                    or (
+                        event.application_id is not None
+                        and event.application_id != scope.application_id
+                    )
+                    or (event.content is not None and event.content != scope.request.content)
+                )
+                for event in self._identity_history
+            )
+        ):
+            return NativeQueueReason.IDENTITY_CHANGED
+        if (
+            not scope.started_monotonic <= media.monotonic <= now
+            or not 0 <= now - media.monotonic <= 5
+            or not 0 <= now - receiver.get("monotonic", float("-inf")) <= 5
+        ):
+            return NativeQueueReason.STALE_OBSERVATION
+        if request.action == NativeQueueAction.PLAY_NEXT:
+            if media.state not in {PlayerState.PLAYING, PlayerState.PAUSED}:
+                return NativeQueueReason.STATE_MISMATCH
+            if media.ad_active is not False:
+                return NativeQueueReason.AD_STATE_UNQUALIFIED
+        return None
+
+    def native_queue(self, request: NativeQueueRequest) -> NativeQueueReceipt:
+        """Dispatch once. The caller journals intent and limits approved successors.
+
+        No local deduplication substitutes for durability. Native staged work can
+        continue during disconnect or a local hold; reconnect must reconcile it.
+        This method neither consumes callbacks nor changes playback evidence.
+        """
+        self._target(request.scope.request.target)
+        reason = self._native_queue_guard(request)
+        if reason is not None:
+            response = NativeQueueResponse(
+                CommandOutcome.REJECTED, NativeQueueDiagnostic(ControlStage.BACKEND, reason)
+            )
+        else:
+            assert isinstance(self.transport, CastNativeQueueTransport)
+            try:
+                response = self.transport.native_queue(request)
+            except Exception, KeyboardInterrupt:
+                response = NativeQueueResponse(
+                    CommandOutcome.UNKNOWN,
+                    NativeQueueDiagnostic(
+                        ControlStage.TRANSPORT, NativeQueueReason.TRANSPORT_EXCEPTION
+                    ),
+                )
+            if not isinstance(response, NativeQueueResponse):
+                response = NativeQueueResponse(
+                    CommandOutcome.UNKNOWN,
+                    NativeQueueDiagnostic(
+                        ControlStage.TRANSPORT, NativeQueueReason.RESPONSE_UNKNOWN
+                    ),
+                )
+        return NativeQueueReceipt(
+            request, response.outcome, self.clock.utcnow(), response.diagnostic
+        )
 
     def capabilities(self, target: PlaybackTarget) -> PlaybackCapabilities:
         self._target(target)
@@ -608,6 +733,79 @@ class _Transport:
         self, scope: PlaybackScope, playback_id: str, action: CommandAction
     ) -> ControlResponse:
         return self.connection.control(scope, playback_id, action)
+
+    def _native_queue_guard(self, request: NativeQueueRequest) -> NativeQueueReason | None:
+        """Recheck mutable library identity without polling or initializing anything."""
+        scope = request.scope
+        cast = self.connection.cast
+        receiver, media = cast.status, cast.media_controller.status
+        if (
+            scope.request.target.route != "cast"
+            or scope.request.content.provider != "youtube"
+            or scope.application_id != YOUTUBE_APPLICATION_ID
+            or (request.successor is not None and request.successor.provider != "youtube")
+        ):
+            return NativeQueueReason.PROVIDER_MISMATCH
+        if not cast.socket_client.is_connected or cast.socket_client.is_stopped:
+            return NativeQueueReason.CONNECTION_CHANGED
+        if (
+            str(cast.uuid) != scope.request.target.device_id
+            or receiver is None
+            or receiver.app_id != scope.application_id
+            or receiver.session_id != scope.session_id
+            or not receiver.transport_id
+            or type(media.media_session_id) is not int
+            or str(media.media_session_id) != request.playback_id
+            or video_id(media.content_id) != scope.request.content.content_id
+        ):
+            return NativeQueueReason.IDENTITY_CHANGED
+        if request.action == NativeQueueAction.PLAY_NEXT and media.player_state not in {
+            "PLAYING",
+            "PAUSED",
+        }:
+            return NativeQueueReason.STATE_MISMATCH
+        youtube = self.connection.youtube
+        # These pinned-library readiness fields are inspected only as a local
+        # guard and never returned/logged. Without them the public queue methods
+        # can call update_screen_id(), which may launch YouTube implicitly.
+        session = youtube._session
+        if (
+            not youtube._screen_id
+            or session is None
+            or session._screen_id != youtube._screen_id
+            or not session.in_session
+        ):
+            return NativeQueueReason.SESSION_UNINITIALIZED
+        return None
+
+    def native_queue(self, request: NativeQueueRequest) -> NativeQueueResponse:
+        """Thin forwarding to pinned methods, not an atomic session-pinned command.
+
+        PyChromecast bounds individual HTTP calls; casttube rebinds its lounge
+        session internally. Receiver changes during that I/O cannot be excluded.
+        Recheck before and after, report uncertainty on change, and never retry.
+        """
+        reason = self._native_queue_guard(request)
+        if reason is not None:
+            return NativeQueueResponse(
+                CommandOutcome.REJECTED,
+                NativeQueueDiagnostic(ControlStage.TRANSPORT_GUARD, reason),
+            )
+        try:
+            if request.action == NativeQueueAction.PLAY_NEXT:
+                assert request.successor is not None
+                self.connection.youtube.play_next(request.successor.content_id)
+            else:
+                self.connection.youtube.clear_playlist()
+            reason = self._native_queue_guard(request)
+        except Exception, KeyboardInterrupt:
+            reason = NativeQueueReason.TRANSPORT_EXCEPTION
+        return NativeQueueResponse(
+            CommandOutcome.ACCEPTED if reason is None else CommandOutcome.UNKNOWN,
+            NativeQueueDiagnostic(
+                ControlStage.TRANSPORT, reason or NativeQueueReason.COMMAND_RETURNED
+            ),
+        )
 
 
 @contextmanager
