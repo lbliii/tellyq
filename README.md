@@ -72,8 +72,11 @@ its playback before adoption, and reconciles authorized playback on reconnect
 without sending new work. It is opt-in through `"mode": "native"`; existing
 manifests retain legacy behavior. The [merged-runner checkpoint](docs/NATIVE-RUNNER-CHECKPOINT.md)
 passed one three-item sequence, active stop and reconnect, but a second sequence
-held after its middle item. M2 remains open pending repeatable handoffs. The new
-example uses quiet nature clips.
+held after its middle item. A subsequent [enqueue investigation](docs/ENQUEUE-INVESTIGATION.md)
+passed repeated and distinct three-item comparisons with four more verified
+handoffs, but did not reproduce or explain the stall. M2 remains open pending
+repeatable handoffs. The examples use quiet nature clips; the user confirmed
+visible advancement and audible nature sound in the distinct-video investigation.
 
 For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and
 [architecture direction](docs/ARCHITECTURE.md). They cover typed contracts,

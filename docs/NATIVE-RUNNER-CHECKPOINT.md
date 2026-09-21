@@ -7,6 +7,11 @@ acknowledged enqueue for the final A. **M2 remains open.** Three verified handof
 were observed across the two attempts; the required three successful three-item
 sessions and six handoffs were not achieved.
 
+The subsequent [enqueue investigation](ENQUEUE-INVESTIGATION.md) at `b0e32b1`
+passed a repeated and a distinct three-item comparison with response-only
+instrumentation. Those four additional handoffs did not reproduce or explain the
+failure below. The investigation preserves this failed attempt and M2 remains open.
+
 These supervised checks ran on 2026-09-21 with Python 3.14.0 and the locked
 PyChromecast 14.0.10/casttube 0.2.1 dependencies. Actual merged `main` passed all
 1,352 offline tests, lint, formatting, ty, source/wheel builds and isolated install

@@ -36,7 +36,13 @@ Python SDK. Google's [Cast messages](https://developers.google.com/cast/docs/med
 define standard status fields but leave `customData` application-specific.
 The [native queue integration plan](M2-NATIVE-QUEUE-PLAN.md) describes the selected
 next work and the user-approved one-successor continuation/reconnect behavior.
-The persistent foreground runner has not yet adopted this route; M2 remains open.
+The [native foreground runner](NATIVE-QUEUE-RUNNER.md) now implements this route
+as an opt-in mode. M2 remains open after an intermittent acknowledged enqueue
+failed to advance. The [response-capture investigation](ENQUEUE-INVESTIGATION.md)
+compares repeated and distinct third clips and records upstream parser/event-reader
+options, including casttube's open message-log proposal and pyytlounge's existing
+subscription implementation. No library upgrade or delivery fix has been inferred
+from those sources.
 
 ## Possible later components
 

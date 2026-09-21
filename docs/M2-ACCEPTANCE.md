@@ -11,6 +11,11 @@ passed one three-item sequence, active cancellation and process-loss recovery.
 A second sequence stalled after its middle item despite acknowledged enqueue;
 the required repeated-session gate remains unmet. That record preserves the
 failed attempt and separates the checkpoint script's exit-code reporting fix.
+The [enqueue investigation](ENQUEUE-INVESTIGATION.md) subsequently passed two
+instrumented comparisons (four handoffs) at `b0e32b1`, including visual advancement
+and audible nature sound confirmed for the distinct-video run. The intermittent
+failure is still unresolved; these comparisons are not a replacement acceptance
+batch.
 
 The remaining live gate is three three-item sessions with six correct automatic
 handoffs, no duplicate starts, verified pause/resume, cancellation preventing the
