@@ -18,8 +18,8 @@ at dispatch. An active or unknown receiver is refused.
 ```sh
 uv run --locked python scripts/checkpoint_youtube.py start \
   --device-config runtime/queue.json \
-  --content f9F7yDjSdNA \
-  --output runtime/checkpoints/nasa-a-attempt-1 \
+  --content=-6_mbMXxdfg \
+  --output runtime/checkpoints/nature-a-attempt-1 \
   --seconds 240 \
   --after-terminal 20 \
   --pause-hold 20 \
@@ -32,6 +32,10 @@ tree is clean. Python, actual GIL status and installed PyChromecast/casttube
 versions are recorded automatically. Omit `--pause-hold` for a natural-ending-only
 attempt. Use a new output directory for every attempt, including refused or failed
 attempts. Existing output is rejected before connecting to hardware.
+
+The example uses the current [quiet nature test selection](LIVE-TEST-MEDIA.md).
+Keep the `--content=ID` form for IDs beginning with a hyphen so argument parsing
+does not mistake the ID for an option.
 
 `start` is mandatory. The exact content argument must be an 11-character YouTube
 video ID. No receiver is selected from discovery results by position or friendly

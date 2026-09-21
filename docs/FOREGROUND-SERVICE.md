@@ -16,6 +16,8 @@ new activity. It is not inactive-ad evidence or permission to launch another ite
 ## Running a session
 
 Copy [the example manifest](../examples/session.json) to an ignored runtime file.
+It uses the short [nature test clips](LIVE-TEST-MEDIA.md) selected for future live
+checks. Edit the manifest's content IDs and titles to change the viewing selection.
 Replace the placeholder device UUID and queue ID. Keep real device identifiers in
 `runtime/`. Each manifest has one exact Cast target, 1–32 exact YouTube video IDs
 and unique item IDs. Repeated titles use different item IDs. A durable queue ID
