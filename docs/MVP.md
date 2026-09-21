@@ -60,13 +60,26 @@ A public direct-media Cast test may help diagnose connectivity if YouTube fails,
 
 ## Current status
 
-Implementation and live testing are now authorized. Python 3.14.0 and released
-PyChromecast 14.0.10 are installed in `.venv/`; discovery, queue, start, status,
-stop and a direct probe are implemented. Receiver telemetry confirmed the requested
-Bob Ross ID/title and advancing positions. The initial attempt ran while the
-Chromecast was not connected to TV HDMI, so it did not establish visible playback.
-After reconnecting HDMI, the user confirmed visible Bob Ross playback and automatic
-TV switching. Fresh receiver samples showed advancing position and software stop
-was verified by YouTube exiting. The first milestone passed; the queue is stopped.
-Full-episode completion and automatic queue advancement remain untested and out of
-this first milestone. See `IMPLEMENTATION.md` for outcomes and remaining work.
+The original playback proof is M0 in the [roadmap](ROADMAP.md), and passed on
+2026-09-21. Python 3.14.0 with the standard GIL and released PyChromecast 14.0.10
+supported discovery, queue, start, status, stop and a direct probe. Receiver
+telemetry showed the requested Bob Ross ID/title and advancing positions. The
+initial attempt ran while Chromecast HDMI was disconnected and did not establish
+visible playback. After reconnecting HDMI, the user confirmed visible playback
+and automatic TV switching. That proof remains historical evidence, not a claim
+about the TV's current state.
+
+The M1 foundation checkpoint on `a2b72a9` passed 251 automated tests. A fresh live
+regression confirmed visible Bob Ross playback and two status reads without
+restarting. The user confirmed that stop returned to the Chromecast home screen;
+software reported `unconfirmed` and retained `playing` in the saved queue because
+it rejected receiver replies without an `applications` field. Stop is intended to
+exit YouTube, not leave a paused frame. Application and stop-evidence candidates
+have since passed 351 combined offline tests and packaging/install checks. Both
+code PRs also passed macOS/Linux CI. M1 still needs their review/merge,
+merged-main checks and a fresh explicitly requested hardware regression.
+
+See [implementation history](IMPLEMENTATION.md) and the
+[M1 acceptance record](M1-ACCEPTANCE.md). Full-episode completion and automatic
+queue advancement remain untested and outside M1. Hardware checks require an
+explicitly requested task; repository setup and normal tests never control the TV.

@@ -1,8 +1,12 @@
 # TellyQ roadmap
 
-Planning baseline: 2026-09-21. M0 is verified. M1's repository tooling and initial
-type annotations are implemented; its full domain contracts remain in progress.
-The later milestones below are proposed work.
+Updated 2026-09-21. M0's hardware proof is verified. M1's domain contracts,
+validated storage and Cast normalization are merged. Application integration and
+stop-verification candidates passed combined offline checks (351 tests), and both
+code PR heads passed macOS/Linux CI. Merge, checks of the actual merged commit
+and a fresh hardware regression remain pending. The later milestones
+below are proposed work. See the [M1 acceptance record](M1-ACCEPTANCE.md) for
+commit-specific results and remaining gates.
 
 ## Product goal
 
@@ -19,7 +23,7 @@ are proven on the actual device. A graphical interface is optional.
 | ID | Outcome | Completion evidence | Status / dependency |
 | --- | --- | --- | --- |
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
-| M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | In progress: tooling + initial annotations; M0 |
+| M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | In progress: foundations merged; combined candidate validated, merge/live acceptance pending; M0 |
 | M2 | Reliable unattended YouTube queue | Natural endings observed; three sessions of three items advance correctly; pause, stop, disconnect and restart scenarios produce no false completion or duplicate launches | M1 |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | M2 |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
@@ -36,10 +40,15 @@ stay in the denominator and in the run record. M7 is not a prerequisite for M8.
 The [M1 execution plan](M1-PLAN.md) breaks this milestone into independent agent
 workstreams, file ownership, PRs targeting `main`, and a later integration gate.
 
-Deliver frozen typed models for content, targets, attempts, acknowledgements,
-observations, capabilities and errors. Move YouTube ID parsing and Cast app/session
-handling into the adapter. Inject the clock and state store. Keep Bob Ross as an
-example/fixture instead of a controller-wide constant.
+The frozen domain values, pure evidence policy, backend/store/clock protocols,
+validated legacy storage and defensive Cast parser have landed. The second-wave
+candidates connect those boundaries to the controller, move Cast session handling
+into the adapter, inject the clock and store, and use the extracted Bob Ross
+example data. They also address the stop-verification regression, where YouTube
+exited visibly but software retained `playing`. The combined candidate passed
+351 offline tests and packaging/install checks; both code PR heads
+also passed macOS/Linux CI. Merge, checks on actual `main` and a fresh live
+regression determine final acceptance.
 
 Introduce only the protocols needed by the existing backend and a test double.
 Use the design in [ARCHITECTURE.md](ARCHITECTURE.md), including separate playback,
@@ -48,13 +57,20 @@ manufacturing certainty. Validate serialized input at the boundary.
 
 Acceptance:
 
-- Existing 16 regressions continue to pass or have equivalent migrated assertions.
-- A fake backend passes the same adapter contract as the Cast backend's recorded
-  behavior, without importing PyChromecast into the domain or storage layers.
+- Existing playback and foundation regressions pass or have equivalent migrated assertions.
+- A fake backend and Cast adapter with mocked transport pass the same executable
+  contract suite, without importing PyChromecast into the domain or storage layers.
+  Synthetic replay establishes contract behavior, not new hardware evidence.
 - Partial, stale, duplicate, out-of-order and replaced-session observations never
   become new playback or completion evidence.
 - CLI command names remain compatible; JSON has a documented version and an
   explicit migration story. Old local queue files can be read/migrated safely.
+- Fresh owned-session exit verifies stop; malformed/missing data, old responses
+  and a replacement session cannot fabricate that outcome. Uncertain stops do
+  not leave misleading persisted `playing` state.
+- The integrated start/status/stop flow passes a bounded supervised hardware
+  regression, with user-visible playback recorded separately from telemetry.
+  Unknown ad state stays unknown; M1 makes no natural-completion claim.
 - Adopt Ruff formatting/linting, Ty, pytest and a reproducible development lock.
   Core tests run with the Cast and future UI/MCP dependencies absent.
 
@@ -188,8 +204,9 @@ separate compatibility lane, not a prerequisite for the useful release.
 
 ## Immediate next work
 
-Finish M1: domain models, adapter/store/clock boundaries, validation and replay
-fixtures, preserving the successful playback behavior. Quality tooling and initial
-JSON record annotations are in place. Then run M2a before writing
-automatic advancement. M4's inventory and route research can proceed alongside
-that work; it need not block the core.
+Review and merge M1's application and stop-evidence candidates, then test actual
+merged `main`. Run the explicitly requested bounded hardware regression and record
+the accepted commit. The combined candidate's shared adapter/flow checks already
+pass. Run M2a's natural-ending experiments before implementing automatic advancement. M4's
+inventory and route research can proceed alongside that work; it need not block
+the core.
