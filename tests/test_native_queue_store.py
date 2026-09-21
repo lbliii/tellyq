@@ -338,6 +338,41 @@ def test_hold_and_recovery_never_cancel_and_stop_still_targets_adopted_current(s
     assert claimed.commands[-1].attempt_id == "attempt-b"
 
 
+def test_successor_starting_after_cancel_can_be_adopted_for_owned_stop(store):
+    queued = staged(store)
+    store.cancel_queue("queue", expected_revision=queued.revision)
+    observed = adopt(store)
+    assert observed.cancellation_requested and observed.reconciliation_required
+    assert observed.current_item_id == "b"
+    stopped = store.prepare_stop(
+        "queue",
+        attempt_id="attempt-b",
+        command_id="stop-b",
+        at=NOW,
+        expected_revision=observed.revision,
+    )
+    assert stopped.commands[-1].attempt_id == "attempt-b"
+    assert stopped.items[0].intent == QueueIntent.NEEDS_ATTENTION
+
+
+def test_native_current_controls_remain_available_with_predecessor_attention_hold(store):
+    staged(store)
+    observed = adopt(store)
+    paused = store.prepare_control(
+        "queue",
+        attempt_id="attempt-b",
+        command_id="pause-b",
+        action=CommandAction.PAUSE,
+        at=NOW,
+        expected_revision=observed.revision,
+    )
+    dispatched = store.mark_dispatched(
+        "queue", "pause-b", at=NOW, expected_revision=paused.revision
+    )
+    assert dispatched.commands[-1].attempt_id == "attempt-b"
+    assert dispatched.reconciliation_required and not dispatched.cancellation_requested
+
+
 @pytest.mark.parametrize("adopted", (False, True))
 def test_clear_requires_cancellation_accepts_current_a_or_b_and_unknown_allows_stop(store, adopted):
     staged(store)
