@@ -280,3 +280,96 @@ class YouTubeMetadataRecord(TypedDict, total=False):
     samples: int
     dropped_samples: int
     seconds: float
+
+
+# Version 1 private Unix-domain owner protocol. No device effect follows from ok alone.
+type IPCValue = str | int | float | bool | list[IPCValue] | dict[str, IPCValue] | None
+type IPCAction = Literal["start", "stop", "pause", "resume"]
+type IPCCode = Literal[
+    "status",
+    "accepted",
+    "ticket",
+    "shutdown",
+    "shutdown_timeout",
+    "invalid_request",
+    "command_conflict",
+    "command_rejected",
+    "runner_unavailable",
+    "mailbox_full",
+    "history_full",
+    "ticket_missing",
+    "server_busy",
+    "response_too_large",
+    "internal_error",
+]
+
+
+class IPCContent(TypedDict):
+    provider: str
+    content_id: str
+    kind: Literal["video", "episode"]
+    title: str | None
+
+
+class IPCTarget(TypedDict):
+    device_id: str
+    route: str
+    name: str | None
+
+
+class IPCPlaybackRequest(TypedDict):
+    request_id: str
+    attempt_id: str
+    queue_item_id: str
+    content: IPCContent
+    target: IPCTarget
+
+
+class IPCCommand(TypedDict):
+    command_id: str
+    action: IPCAction
+    request: IPCPlaybackRequest | None
+
+
+class IPCRequest(TypedDict):
+    schema_version: Literal[1]
+    operation: Literal["status", "submit", "ticket", "shutdown"]
+    command: NotRequired[IPCCommand]
+    command_id: NotRequired[str]
+    timeout: NotRequired[float]
+
+
+class IPCTaskView(TypedDict):
+    """Explicit read-only projections; nested values are JSON, never hydrated objects."""
+
+    playback: dict[str, IPCValue] | None
+    queue: dict[str, IPCValue] | None
+
+
+class IPCTicket(TypedDict):
+    command_id: str
+    action: IPCAction
+    state: Literal["queued", "running", "handled", "canceled", "failed"]
+    failure: str | None
+    view: IPCTaskView | None
+
+
+class IPCRunnerSnapshot(TypedDict):
+    phase: Literal["new", "starting", "running", "stopping", "stopped", "failed"]
+    revision: int
+    owns_device: bool
+    cancellation_requested: bool
+    pending_commands: int
+    active_command_id: str | None
+    last_command_id: str | None
+    view: IPCTaskView
+    failure: str | None
+
+
+class IPCResponse(TypedDict):
+    schema_version: Literal[1]
+    ok: bool
+    code: IPCCode
+    snapshot: NotRequired[IPCRunnerSnapshot]
+    ticket: NotRequired[IPCTicket]
+    ticket_id: NotRequired[str]
