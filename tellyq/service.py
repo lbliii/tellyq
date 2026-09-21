@@ -111,7 +111,7 @@ def legacy_spec(runtime: Path, queue_id: str) -> QueueSpec:
 def cast_backend(target: PlaybackTarget, clock: Clock) -> Iterator[PlaybackBackend]:
     from .cast_backend import open_backend
 
-    with open_backend(target, clock, 30) as (backend, _device):
+    with open_backend(target, clock, 30, retain_raw=False) as (backend, _device):
         yield backend
 
 

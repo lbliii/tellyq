@@ -182,7 +182,7 @@ PRs and a service integration PR all targeting `main`:
 | --- | --- | --- |
 | Concrete playback task and handoff | [PR #28](https://github.com/lbliii/tellyq/pull/28), `44f92f08b6d096001a380be7c7866742370e351a` | 875 tests, Ruff/format/ty, wheel/sdist and isolated installation |
 | Private local IPC | [PR #27](https://github.com/lbliii/tellyq/pull/27), `4de6e7647e6ce976217256cb7e718c17b0658c46` | 887 tests, Ruff/format/ty, wheel/sdist and isolated installation |
-| Foreground composition | `codex/m2b-service`, includes both exact component commits | 959 tests, 90.0% branch-inclusive coverage, lint/types, wheel/sdist and isolated installation |
+| Foreground composition | [PR #29](https://github.com/lbliii/tellyq/pull/29), includes both exact component commits | 964 tests, 90.0% branch-inclusive coverage, lint/types, wheel/sdist and isolated installation |
 
 The service integration includes both component histories so its head is usable
 and testable on its own. Merge the two component PRs first for smaller reviews;
@@ -209,6 +209,10 @@ retries, and cleanup that could truncate the final IPC shutdown response. Servic
 cleanup also joins its threads if stdout fails during a shutdown timeout. Default
 Cast integration rejects non-video content kinds before connecting because the
 adapter normalizes YouTube observations as video identities.
+Persistent Cast observation now retains only the latest raw window and at most
+six private identity witnesses. Equivalence tests compare takeover decisions
+against full history over arbitrary scope boundaries; returning to an old identity
+cannot erase a takeover, and a new connection still invalidates old scopes.
 
 The combined scenario runs actual CLI/AF_UNIX IPC, owner, task and SQLite with a
 synthetic receiver: three items finish, three starts and three releases occur,

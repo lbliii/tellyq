@@ -74,6 +74,12 @@ under the selected runtime. IPC is local to the account, bounded in frame size,
 client concurrency and command history; it does not expose a TCP listener. See
 [LOCAL-IPC.md](LOCAL-IPC.md) for wire contracts and capacity errors.
 
+The foreground Cast adapter retains only its latest raw observation window.
+Private takeover guards retain at most six identity witnesses, preserving the
+latest mismatch for every possible scope boundary even after identity returns to
+its original value. These witnesses do not replace ordered lifecycle evidence.
+Short diagnostic commands retain their existing raw-capture behavior.
+
 Legacy JSON import is explicit:
 
 ```sh
