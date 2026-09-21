@@ -4,15 +4,17 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from queue import Empty, Queue
-from threading import Event
+from threading import Event, Lock
 from time import monotonic
 from typing import Protocol
 from uuid import UUID
 
 import pychromecast
 from pychromecast.controllers import BaseController
+from pychromecast.controllers.receiver import ReceiverController
 from pychromecast.controllers.youtube import YouTubeController
 from pychromecast.models import CastInfo
+from pychromecast.socket_client import ConnectionStatus, ConnectionStatusListener
 from zeroconf import Zeroconf
 
 from .cast_messages import media_observation as media_observation
@@ -64,21 +66,105 @@ def select_device[T: HasUUID](devices: Iterable[T], device_id: str) -> T:
     return matches[0]
 
 
-class Observer(BaseController):
-    """Passive listener alongside PyChromecast's standard handlers."""
+class Observer(BaseController, ConnectionStatusListener):
+    """Listener with single-use correlation for our receiver status polls."""
 
     def __init__(self, namespace: str, events: Queue[Observation]) -> None:
         super().__init__(namespace, target_platform=namespace == RECEIVER)
         self.events = events
+        self._status_lock = Lock()
+        self._status_request: dict[str, object] | None = None
+        self._status_deadline = 0.0
+
+    def request_status(self, receiver: ReceiverController, deadline: float) -> None:
+        """Poll receiver status, superseding any earlier unanswered request.
+
+        PyChromecast 14.0.10 adds requestId to this same dict before sendall.
+        Keep it available before sending so an immediate reply can correlate.
+        This is the same GET_STATUS as ReceiverController.update_status, with
+        the assigned ID retained here instead of an unbounded callback entry.
+        """
+        with self._status_lock:
+            request: dict[str, object] = {"type": "GET_STATUS"}
+            self._status_request = request
+            self._status_deadline = deadline
+        # Never hold the observation lock across transport I/O. The assigned ID
+        # is written before bytes are sent, so even an immediate reply sees it.
+        try:
+            receiver.send_message(request)
+        except Exception:
+            with self._status_lock:
+                if self._status_request is request:
+                    self._status_request = None
+            raise
+
+    def cancel_status_request(self) -> None:
+        """Retire evidence at the observation-window / connection boundary."""
+        with self._status_lock:
+            self._status_request = None
+
+    def channel_disconnected(self) -> None:
+        self.cancel_status_request()
+
+    def new_connection_status(self, status: ConnectionStatus) -> None:
+        # Platform observers do not receive app channel_disconnected callbacks
+        # reliably. Socket transitions also reset PyChromecast's request counter.
+        with self._status_lock:
+            self._status_request = None
+            if status.status in {"LOST", "DISCONNECTED", "CONNECTING"}:
+                self.events.put(
+                    {
+                        "kind": "error",
+                        "type": "CONNECTION_RESET",
+                        "reason": status.status,
+                        "code": None,
+                        "observed_at": now(),
+                        "monotonic": monotonic(),
+                    }
+                )
+
+    def _matching_request_id(self, data: object, received_at: float) -> int | None:
+        pending = self._status_request
+        if pending is None:
+            return None
+        if received_at >= self._status_deadline:
+            self._status_request = None
+            return None
+        if not isinstance(data, dict) or data.get("type") != "RECEIVER_STATUS":
+            return None
+        request_id = pending.get("requestId")
+        reply_id = data.get("requestId")
+        if (
+            type(request_id) is not int
+            or request_id <= 0
+            or type(reply_id) is not int
+            or reply_id != request_id
+        ):
+            return None
+        self._status_request = None
+        return request_id
 
     def receive_message(self, _message: object, _data: object) -> bool:
-        value = normalize_message(_data)
-        if value is None:
-            return False
-        # The parser creates a new record containing only immutable scalars;
-        # later mutation of a library-owned message cannot alter queued evidence.
-        self.events.put({"observed_at": now(), "monotonic": monotonic(), **value})
-        return True
+        with self._status_lock:
+            received_at = monotonic()
+            request_id = self._matching_request_id(_data, received_at)
+            value: Observation | None = normalize_message(
+                _data, receiver_status_request_id=request_id
+            )
+            if value is None:
+                return False
+            if value["kind"] == "receiver" and value.get("app_id") is None and request_id is None:
+                # Even explicit [] can be a delayed reply to a pre-stop poll.
+                value = {
+                    "kind": "error",
+                    "type": "INVALID_RECEIVER_STATUS",
+                    "reason": "UNCORRELATED_APP_ABSENCE",
+                    "code": None,
+                }
+            # Ownership transfer and retirement share the lock: no old poll can
+            # enqueue a newly timestamped idle result after its window closes.
+            self.events.put({"observed_at": now(), "monotonic": received_at, **value})
+            return True
 
 
 class Connection:
@@ -88,7 +174,9 @@ class Connection:
             info, zconf, tries=2, retry_wait=1, timeout=8
         )
         self.cast.register_handler(Observer(MEDIA, self.events))
-        self.cast.register_handler(Observer(RECEIVER, self.events))
+        self.receiver_observer = Observer(RECEIVER, self.events)
+        self.cast.register_handler(self.receiver_observer)
+        self.cast.register_connection_listener(self.receiver_observer)
         self.youtube = YouTubeController(timeout=10)
         self.cast.register_handler(self.youtube)
 
@@ -102,11 +190,16 @@ class Connection:
 
     def observe(self, seconds: float) -> list[Observation]:
         end = monotonic() + seconds
-        while monotonic() < end:
-            self.cast.socket_client.receiver_controller.update_status()
-            if self.cast.media_controller.is_active:
-                self.cast.media_controller.update_status()
-            Event().wait(min(2, max(0, end - monotonic())))
+        try:
+            while monotonic() < end:
+                self.receiver_observer.request_status(
+                    self.cast.socket_client.receiver_controller, min(end, monotonic() + 2)
+                )
+                if self.cast.media_controller.is_active:
+                    self.cast.media_controller.update_status()
+                Event().wait(min(2, max(0, end - monotonic())))
+        finally:
+            self.receiver_observer.cancel_status_request()
         return self.drain()
 
 
@@ -119,5 +212,6 @@ def connect(device_id: str, discovery_seconds: float = 12) -> Iterator[tuple[Con
             connection.cast.wait(timeout=15)
             yield connection, device_dict(info)
         finally:
+            connection.receiver_observer.cancel_status_request()
             if connection.cast.socket_client.is_alive():
                 connection.cast.disconnect(timeout=10)

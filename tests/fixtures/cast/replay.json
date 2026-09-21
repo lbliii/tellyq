@@ -64,7 +64,8 @@
     {
       "name": "empty receiver",
       "message": {"type": "RECEIVER_STATUS", "status": {"applications": []}},
-      "expected": {"kind": "receiver", "app_id": null, "app_name": null, "app_session_id": null, "active_input": null, "standby": null}
+      "expected": {"kind": "receiver", "app_id": null, "app_name": null, "app_session_id": null, "active_input": null, "standby": null},
+      "expected_callback": {"kind": "error", "type": "INVALID_RECEIVER_STATUS", "reason": "UNCORRELATED_APP_ABSENCE", "code": null}
     }
   ]
 }
