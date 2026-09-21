@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Record merged M2a acceptance at `6aec896` and begin the M2b component swarm for
-  queue decisions, durable dispatch/recovery and persistent ownership. Foreground
-  CLI/IPC integration and automatic handoff acceptance follow this first wave.
+- Add M2b components for pure queue decisions, fenced durable dispatch/recovery,
+  and a persistent owner with bounded mailbox, cached status and priority stop.
+  They pass 832 combined offline tests. Foreground CLI/IPC composition and live
+  automatic handoff acceptance remain subsequent work.
+- Record merged M2a acceptance at `6aec896` and the independent M2b work-stream plan.
 
 - Interpret a finite set of source-qualified YouTube player states and attribute
   valid incremental terminals through ordered content history. Preserve a separate

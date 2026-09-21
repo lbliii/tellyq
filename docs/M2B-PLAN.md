@@ -25,10 +25,10 @@ local ownership and durable execution stay separate from YouTube interpretation.
 
 | Stream | Branch and file ownership | Measurable deliverable |
 | --- | --- | --- |
-| Q2: Pure queue decisions | `codex/m2b-queue-policy`; new `tellyq/domain/queue_policy.py`, focused domain tests and `docs/QUEUE-POLICY.md` | Decide settlement, hold, next eligible item or completion from existing immutable queue/playback evidence. One ending yields one decision; cancellation, uncertainty and takeover cannot launch a next item. |
-| R2: Durable dispatch and recovery | `codex/m2b-durable-execution`; new `tellyq/queue_execution.py`, focused tests and `docs/QUEUE-EXECUTION.md`; documentation-only clarification of `QueueStore.mark_dispatched` | Commit intent and win one dispatch claim before a bounded supplied device operation; record receipt separately. Repeated IDs, failed persistence and reopened databases never silently repeat an uncertain effect. |
-| R1/R3: Owner and mailbox | `codex/m2b-owner-mailbox`; new `tellyq/runner.py`, focused runner tests and `docs/RUNNER.md` | One non-daemon worker owns task creation, effects and close. Bounded mailbox, cached immutable status, priority stop/cancellation and explicit shutdown timeout; competing owners fail. |
-| Coordination | `codex/m2b-plan`; this plan, roadmap, architecture, acceptance notes and changelog | Review interfaces and failure boundaries, test independent and exact combined heads, and publish separate PRs targeting `main`. |
+| Q2: Pure queue decisions | [PR #25](https://github.com/lbliii/tellyq/pull/25), `codex/m2b-queue-policy`; new `tellyq/domain/queue_policy.py`, focused domain tests and `docs/QUEUE-POLICY.md` | Decide settlement, hold, next eligible item or completion from existing immutable queue/playback evidence. One ending yields one decision; cancellation, uncertainty and takeover cannot launch a next item. |
+| R2: Durable dispatch and recovery | [PR #24](https://github.com/lbliii/tellyq/pull/24), `codex/m2b-durable-execution`; new `tellyq/queue_execution.py`, focused tests and `docs/QUEUE-EXECUTION.md`; documentation-only clarification of `QueueStore.mark_dispatched` | Commit intent and win one dispatch claim before a bounded supplied device operation; record receipt separately. Repeated IDs, failed persistence and reopened databases never silently repeat an uncertain effect. |
+| R1/R3: Owner and mailbox | [PR #26](https://github.com/lbliii/tellyq/pull/26), `codex/m2b-owner-mailbox`; new `tellyq/runner.py`, focused runner tests and `docs/RUNNER.md` | One non-daemon worker owns task creation, effects and close. Bounded mailbox, cached immutable status, priority stop/cancellation and explicit shutdown timeout; competing owners fail. |
+| Coordination | [PR #23](https://github.com/lbliii/tellyq/pull/23), `codex/m2b-plan`; this plan, roadmap, architecture, acceptance notes and changelog | Review interfaces and failure boundaries, test independent and exact combined heads, and publish separate PRs targeting `main`. |
 
 All agent code runs offline. The coordinator owns integration and publication;
 no agent discovers devices, plays media or changes private legacy queue/session
@@ -139,3 +139,35 @@ After the first-wave PRs merge:
 
 M2b closes only after that composed behavior passes. MCP, subscription services,
 Cueby's recommendations and the optional Chirp interface remain later milestones.
+
+## First-wave review and validation
+
+All three implementation PRs start directly from `6aec896`, target `main`, and
+pass independently. They add no dependency and do not alter the CLI or live Cast
+adapter. The only existing-code-file change outside the new components is a
+clarifying docstring for the already-strict `QueueStore.mark_dispatched` claim.
+
+| Component | Reviewed commit | Independent validation |
+| --- | --- | --- |
+| Queue policy | `24faf2e` | 755 tests, including 89 new cases; Ruff/format/ty, source/wheel builds and isolated installation |
+| Durable execution | `d4522ba` | 717 tests, including 51 new real-SQLite boundary cases; lint/types/build/install |
+| Owner and mailbox | `578cb91` | 692 tests, including 26 event/barrier/subprocess cases; lint/types/build/install |
+| Exact combined candidate | `8c35286f5e85edabf56d3eb178be6b68cea50946` | `poe ci`: 832 tests, 93.9% branch-inclusive coverage, Ruff/format/ty, source/wheel builds and isolated installation |
+
+The combined candidate's tree is `6ffc526d5bf93159f95de0b4a64a46c801b86181`.
+Later plan-only edits record these results; the tested component commits above
+remain unchanged. No hardware operations occurred and existing private runtime
+queue/session files were not migrated or rewritten.
+
+Cross-review fixed mailbox command-ID collisions across regular, active and
+reserved stop slots. Tests now reject the same known ID describing a different
+action before cancellation or queuing. Independent owner review found no further
+actionable issue and reran all 26 focused tests. Policy review tightened idle
+ordering and ties a persisted FINISHED decision back to its original live witness.
+A real SQLite bridge verifies settlement idempotence and cancellation after
+settlement but before next selection. Executor review verifies receipt identity,
+a START-only cancellation guard and explicit uncertainty after persistence failures.
+
+These are component acceptance results. They do not establish a running IPC
+service, composed queue recovery, measured live stop latency or automatic handoffs.
+The composition wave above is still required before M2b can close.
