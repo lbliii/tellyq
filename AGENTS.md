@@ -1,4 +1,6 @@
-# Cozy TV project guidance
+# TellyQ project guidance
+
+TellyQ is the app name. Cueby is its TV-programming companion.
 
 Read README.md and docs/MVP.md before implementing. docs/RESEARCH.md records researched options and material limitations.
 

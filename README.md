@@ -1,6 +1,8 @@
-# Cozy TV
+# TellyQ
 
-A personal TV programmer: describe a mood, then let an agent choose and play a mix of familiar favorites and adjacent discoveries.
+A personal TV programmer: describe a mood, then let Cueby, your TV-programming companion, choose and play a mix of familiar favorites and adjacent discoveries.
+
+TellyQ is the app; Cueby is its companion.
 
 ## First milestone
 

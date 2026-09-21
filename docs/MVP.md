@@ -1,8 +1,8 @@
-# One-program MVP
+# TellyQ: one-program MVP
 
 ## User experience
 
-The user asks the agent to queue and play one cozy program. A software command starts the requested episode on the living-room TV. The agent reports observed playback state and can stop the program.
+The user asks Cueby, TellyQ's TV-programming companion, to queue and play one cozy program. A software command starts the requested episode on the living-room TV. The agent reports observed playback state and can stop the program.
 
 The selected program is Bob Ross — Autumn Fantasy, season 20, episode 7, on the official YouTube channel. Video ID: `FozIp7Va7dY`.
 
