@@ -14,10 +14,10 @@ not control hardware or merge their PRs.
 
 | Stream | Branch and ownership | Measurable deliverable |
 | --- | --- | --- |
-| L1: Continuous lifecycle capture | `codex/m2-lifecycle`; new lifecycle module, capture script, focused tests and lifecycle notes; narrow additive adapter changes | A bounded read-only capture preserves normalized observations across a whole program, writes incremental private records, survives interruption, and exports explicitly labeled sanitized fixtures. Replay tests distinguish unknown, ads, buffering, pause, app exit, takeover and terminal evidence. |
-| C1: Pause and resume | `codex/m2-controls`; playback contracts, Cast normalization/controls, application/CLI and focused tests | Explicit commands require current ownership and advertised or verified support. Command acceptance and observed effect remain separate. Unknown support, stale identity and takeover refuse the effect. Existing start/status/stop behavior remains covered. |
-| S1: Durable queue and command journal | `codex/m2-storage`; new queue values/port, SQLite adapter, tests and storage notes | Atomic queue/attempt/intent transactions, revision checks, stable command IDs, explicit recovery and explicit import of the old queue. Restart and duplicate-command tests cannot silently resend an uncertain device effect or manufacture completion. |
-| P1: Plan and integration | `codex/m2-plan`; this plan and shared roadmap | Review independent and combined candidates, record precise checks and limits, and prepare the next acceptance session. |
+| L1: Continuous lifecycle capture | [PR #14](https://github.com/lbliii/tellyq/pull/14), `codex/m2-lifecycle`; new lifecycle module, capture script, focused tests and lifecycle notes; narrow additive adapter changes | A bounded read-only capture preserves normalized observations across a whole program, writes incremental private records, survives interruption, and exports explicitly labeled sanitized fixtures. Replay tests distinguish unknown, ads, buffering, pause, app exit, takeover and terminal evidence. |
+| C1: Pause and resume | [PR #12](https://github.com/lbliii/tellyq/pull/12), `codex/m2-controls`; playback contracts, Cast normalization/controls, application/CLI and focused tests | Explicit commands require current ownership and advertised or verified support. Command acceptance and observed effect remain separate. Unknown support, stale identity and takeover refuse the effect. Existing start/status/stop behavior remains covered. |
+| S1: Durable queue and command journal | [PR #13](https://github.com/lbliii/tellyq/pull/13), `codex/m2-storage`; new queue values/port, SQLite adapter, tests and storage notes | Atomic queue/attempt/intent transactions, revision checks, stable command IDs, explicit recovery and explicit import of the old queue. Restart and duplicate-command tests cannot silently resend an uncertain device effect or manufacture completion. |
+| P1: Plan and integration | [PR #11](https://github.com/lbliii/tellyq/pull/11), `codex/m2-plan`; this plan and shared roadmap | Review independent and combined candidates, record precise checks and limits, and prepare the next acceptance session. |
 
 L1 and C1 share small additions to Cast adapter and wire-contract files. Those
 changes are coordinated by method/field ownership and tested together before PRs
@@ -87,12 +87,34 @@ SQLite transactions protect local decisions; they do not provide exactly-once
 remote delivery to a Chromecast. Persisted monotonic observations never become
 fresh evidence in a new process.
 
+## First-batch validation
+
+The reviewed code heads are controls `f4b7e59`, storage `3eda15b`, and lifecycle
+`636542b`. Each branch is independent of the others. The two shared adapter/record
+files merge cleanly in either controls/lifecycle order, producing the same tree.
+
+The exact combined candidate at temporary integration commit `74b794d` passed
+`uv run --locked poe ci`: **487 tests**, **92.8% branch-inclusive coverage**,
+Ruff/format/ty, source/wheel builds and isolated installation/CLI smoke. A fresh
+environment containing only the wheel also imported the new and existing core
+modules with Cast, Zeroconf, Milo and Chirp absent, with socket operations blocked
+and no runtime directory created. The runtime was standard CPython 3.14.0 with the
+locked dependencies. Platform CI is attached to the PRs above.
+
+Cross-review found and fixed three boundary issues: cancellation between items
+and after settlement now prevents stale dispatch; unexpected SQLite schema
+objects cannot alter queue mutations; interrupted transport callbacks survive as
+explicitly partial diagnostic data and cannot create completion during replay.
+Export also retains known launch-failure classifications while excluding arbitrary
+diagnostics. All of these results are offline. No natural ending, live pause/resume,
+handoff or stop-latency acceptance run occurred in this batch.
+
 ## Release gates and progress
 
-| Gate | Required result | Starting status |
+| Gate | Required result | Current status |
 | --- | --- | --- |
 | Baseline | M1 merged and accepted | Passed: code `71a3c39`, docs merged at `8a480ea` |
-| First batch | Independent PR checks plus exact combined lint/types/tests/build/install | Agents dispatched; validation pending |
+| First batch | Independent PR checks plus exact combined lint/types/tests/build/install | Reviewed and published as PRs #11–14; local integration passed as recorded above |
 | M2a | Three natural endings, two titles, one pause/resume, justified completion signal | Not run |
 | Runner | One owner, responsive mailbox, durable intent, explicit recovery and cancellation | Subsequent batch |
 | Queue acceptance | Three three-item runs, six correct handoffs, no early or duplicate advancement | Not run |
