@@ -77,6 +77,10 @@ Acceptance:
 
 ## M2 — Finish a program, then advance exactly once
 
+The [M2 execution plan](M2-PLAN.md) defines the first independent agent batch,
+the lifecycle evidence gate, and the subsequent runner/queue work. M2 starts from
+`main` at `8a480ea`, after the M1 acceptance record merged.
+
 Split into two small deliverables.
 
 **M2a: prove lifecycle signals.** Observe three natural YouTube endings across at

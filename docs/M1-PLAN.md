@@ -144,4 +144,4 @@ adapters, UI, a daemon and free-threaded support claims are outside this wave.
 - [x] Merge both code PRs; full local and macOS/Linux CI checks pass on actual `main` at `71a3c39`.
 - [x] Run the explicitly requested hardware regression on merged `main` at `71a3c39`.
 - [x] E1: record the accepted commit `71a3c39` and close M1; M2a is next.
-- [ ] Publish this updated acceptance record by merging [documentation PR #10](https://github.com/lbliii/tellyq/pull/10).
+- [x] Publish the acceptance record: [documentation PR #10](https://github.com/lbliii/tellyq/pull/10) merged at `8a480ea`.
