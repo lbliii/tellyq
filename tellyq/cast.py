@@ -1,6 +1,6 @@
 """Cast transport. Commands run on the caller; receiver events use a thread-safe queue."""
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from queue import Empty, Queue
@@ -317,6 +317,68 @@ class Connection:
         finally:
             self.receiver_observer.cancel_status_request()
         return self.drain()
+
+    def observe_until(
+        self, seconds: float, ready: Callable[[list[Observation]], bool]
+    ) -> list[Observation]:
+        """Wake on callbacks and inspect drained batches, retaining poll deadlines.
+
+        ready receives each batch once. A candidate never skips a contradiction
+        already in the queue, including callbacks queued during its evaluation.
+        Request retirement still prevents late baseline replies proving stop.
+        """
+        end = monotonic() + seconds
+        next_poll = monotonic()
+        result: list[Observation] = []
+        try:
+            while monotonic() < end:
+                if monotonic() >= next_poll:
+                    next_poll = min(end, monotonic() + 2)
+                    self.receiver_observer.request_status(
+                        self.cast.socket_client.receiver_controller, next_poll
+                    )
+                    if self.cast.media_controller.is_active:
+                        self.cast.media_controller.update_status()
+                batch = self.drain()
+                if not batch:
+                    try:
+                        batch = [
+                            self.events.get(timeout=max(0, next_poll - monotonic())),
+                            *self.drain(),
+                        ]
+                    except Empty:
+                        continue
+                complete = False
+                while batch:
+                    result.extend(batch)
+                    complete = ready(batch)
+                    batch = self.drain()
+                if complete:
+                    # Retire under the observer lock before accepting a
+                    # candidate. A callback already transferring ownership may
+                    # have queued another event while retirement waited.
+                    self.receiver_observer.cancel_status_request()
+                    batch = self.drain()
+                    while batch:
+                        result.extend(batch)
+                        complete = ready(batch)
+                        batch = self.drain()
+                    if complete:
+                        break
+                    # A contradiction revoked the candidate; acquire a new
+                    # correlated poll while preserving the original deadline.
+                    next_poll = monotonic()
+        finally:
+            self.receiver_observer.cancel_status_request()
+        # Retirement may wait for a callback currently transferring ownership.
+        # Include that final batch in the caller's decision, even if it revokes
+        # an earlier candidate. Returning early is never itself stop proof.
+        tail = self.drain()
+        while tail:
+            result.extend(tail)
+            ready(tail)
+            tail = self.drain()
+        return result
 
 
 @contextmanager

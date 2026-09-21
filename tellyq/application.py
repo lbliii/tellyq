@@ -4,7 +4,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from .domain import policy
-from .domain.ports import Clock, PlaybackBackend, PlaybackControls, RevisionConflict, SessionStore
+from .domain.ports import (
+    Clock,
+    PlaybackBackend,
+    PlaybackControls,
+    PlaybackObservationUntil,
+    RevisionConflict,
+    SessionStore,
+)
 from .domain.values import (
     CommandAction,
     CommandOutcome,
@@ -246,7 +253,30 @@ class PlaybackApplication:
             raise ValueError("No saved playback ownership; refusing to stop another session.")
         revision = self._revision(owned)
         boundary = self.clock.monotonic()
-        baseline = self.backend.observe(request.target)
+
+        def owned_identity(events: tuple[PlaybackObservation, ...]) -> bool:
+            # A receiver heartbeat alone must not end the baseline before fresh
+            # media can reveal a replacement hidden by the adapter's old cache.
+            try:
+                candidate = self._reconcile(request, owned, boundary, events)
+            except ValueError:
+                return False
+            latest = candidate.latest
+            return (
+                latest is not None
+                and self._fresh(latest, request, boundary)
+                and latest.content == request.content
+                and latest.session_id == candidate.scope.session_id
+                and latest.application_id == candidate.scope.application_id
+                and latest.connection_generation == candidate.scope.connection_generation
+            )
+
+        incremental = isinstance(self.backend, PlaybackObservationUntil)
+        baseline = (
+            self.backend.observe_until(request.target, owned_identity)
+            if incremental
+            else self.backend.observe(request.target)
+        )
         initial = self._reconcile(request, owned, boundary, baseline)
         snapshot = policy.request_stop(initial, boundary=self.clock.monotonic())
         snapshot = self._persist(snapshot, revision)
@@ -254,9 +284,19 @@ class PlaybackApplication:
         receipt = self._dispatch(
             request, CommandAction.STOP, baseline, lambda: self.backend.stop(snapshot.scope)
         )
-        events = self.backend.observe(request.target)
+        commanded = policy.record_receipt(snapshot, receipt)
+
+        def stopped(events: tuple[PlaybackObservation, ...]) -> bool:
+            candidate = self._apply(commanded, events)
+            return candidate.state == PlayerState.STOPPED and not candidate.ownership_lost
+
+        events = (
+            self.backend.observe_until(request.target, stopped)
+            if incremental
+            else self.backend.observe(request.target)
+        )
         self.last_result = PlaybackResult(baseline + events, receipt=receipt)
-        snapshot = self._apply(policy.record_receipt(snapshot, receipt), events)
+        snapshot = self._apply(commanded, events)
         self.last_result = PlaybackResult(
             baseline + events, snapshot, receipt, snapshot.evidence.reason
         )
