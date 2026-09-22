@@ -76,7 +76,7 @@ TellyQ can launch a subscription title.
 | Service | Documented route | What TellyQ actually knows | Planning decision |
 | --- | --- | --- | --- |
 | YouTube | PyChromecast YouTubeController with video ID | Start, identity, progress, visible playback and app-exit stop passed on this hardware; natural completion is untested | Continue here for queue/lifecycle engineering |
-| Netflix | Official mobile casting is restricted by device and plan | User reports Assistant can launch Netflix; no exact-title Python launch, state or completion test | First bounded subscription feasibility probe because of existing setup evidence |
+| Netflix | Official mobile casting is restricted by device and plan; native Google TV remote can launch deep links | On the Projector Google TV, software opened Netflix; after refreshed sign-in and profile selection, the exact-title link landed on Netflix home instead of the requested movie. Passive Cast status supplied no title or playback state | [Bounded probe](M4-NETFLIX-PROBE.md) classifies this route as assisted app launch; compare other services |
 | Disney+ | Official Android/iOS app supports Chromecast casting | Consumer casting documented; independent software launch and telemetry unknown | Compare with Prime Video using the same capability checklist |
 | Prime Video | Official iOS/Android app supports Chromecast; Google TV devices can also run the app | Consumer casting documented; independent software launch and telemetry unknown | Compare with Disney+; no evidence yet that it is easier |
 | Apple TV app | Apple's Android app documents Cast playback | A consumer Cast route exists; independent Mac/Python title launch and telemetry unknown | Keep in comparison; do not assume the Apple TV app requires an Apple TV hardware box |
@@ -127,7 +127,8 @@ assisted viewing; it does not qualify for unattended advancement. If all candida
 routes fail a hard requirement, stop the probe and make the constraint explicit.
 
 **Recommendation, not a proven ease ranking:** YouTube first; a short Netflix probe
-next because of the already working Assistant setup; then select among all four
-subscription services using observed capability coverage and setup cost. An early
+next because of the already working Assistant setup; that probe now confirms
+software app launch but no playback evidence. Compare Disney+
+and Prime Video using observed capability coverage and setup cost. An early
 device limitation may matter more than the service brand. See M4/M5 in
 [ROADMAP.md](ROADMAP.md).
