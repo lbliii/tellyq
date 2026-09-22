@@ -180,8 +180,20 @@ assert tellyq.state.RUNTIME == Path.cwd() / "runtime"
             "stop",
         }:
             raise RuntimeError("Installed tellyq-mcp exposed an unexpected tool set.")
+        # Milo verify needs a module-level CLI object and executes a Python
+        # file. Use a tiny shim against the isolated installed wheel while the
+        # handshake above exercises the wheel's actual console entry point.
+        verify_target = work / "verify_mcp.py"
+        verify_target.write_text(
+            "from pathlib import Path\n"
+            "from tellyq.mcp import build_cli\n"
+            "cli = build_cli(Path('missing-owner').resolve())\n"
+            "if __name__ == '__main__':\n"
+            "    cli.run()\n"
+        )
+        run(str(environment / "bin" / "milo"), "verify", str(verify_target), cwd=work)
     print(
-        "Wheel/sdist contents, isolated imports, CLI help/local queue and optional tellyq-mcp handshake passed."
+        "Wheel/sdist contents, isolated imports, CLI help/local queue, optional tellyq-mcp handshake and Milo verify passed."
     )
 
 

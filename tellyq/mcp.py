@@ -8,20 +8,16 @@ usable without the interface dependency installed.
 from __future__ import annotations
 
 import os
-import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .models import MCPResult
-from .runner_ipc import IPCUnavailable
-from .service_cli import owner_command
+from .service_cli import owner_tool_command
 
 if TYPE_CHECKING:
     from milo import CLI
 
 _RUNTIME_ENV = "TELLYQ_OWNER_RUNTIME"
-_COMMAND_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
 def configured_runtime() -> Path:
@@ -33,63 +29,6 @@ def configured_runtime() -> Path:
     if not runtime.is_absolute():
         raise RuntimeError(f"{_RUNTIME_ENV} must be an absolute path.")
     return runtime
-
-
-def _validate_command_id(command_id: str | None) -> str | None:
-    if command_id is not None and _COMMAND_ID.fullmatch(command_id) is None:
-        raise ValueError("command_id must be 1-128 characters: letters, digits, . _ : or -.")
-    return command_id
-
-
-def _safe_error(exc: Exception) -> MCPResult:
-    if isinstance(exc, IPCUnavailable):
-        error_type = "owner_unavailable"
-        message = (
-            "The owner request could not be confirmed; its outcome may be unknown. "
-            "Check status before retrying."
-        )
-    elif isinstance(exc, ValueError):
-        error_type, message = "owner_rejected", "The foreground owner rejected the command."
-    else:
-        error_type, message = "owner_request_failed", "The foreground owner request failed."
-    return {
-        "schema_version": 1,
-        "ok": False,
-        "code": error_type,
-        "error": {"type": error_type, "message": message},
-    }
-
-
-def _call(command: str, runtime: Path, *, command_id: str | None = None) -> MCPResult:
-    try:
-        validated_id = _validate_command_id(command_id)
-    except ValueError:
-        return {
-            "schema_version": 1,
-            "ok": False,
-            "code": "invalid_command_id",
-            "error": {
-                "type": "invalid_command_id",
-                "message": "command_id must be 1-128 characters: letters, digits, . _ : or -.",
-            },
-        }
-    try:
-        response = owner_command(command, runtime, command_id=validated_id)
-    except Exception as exc:
-        return _safe_error(exc)
-    if not response["ok"]:
-        return {
-            "schema_version": 1,
-            "ok": False,
-            "code": response["code"],
-            "response": response,
-        }
-    return {
-        "schema_version": 1,
-        "ok": True,
-        "code": response["code"],
-        "response": response,
-    }
 
 
 def build_cli(runtime: Path) -> CLI:
@@ -108,7 +47,7 @@ def build_cli(runtime: Path) -> CLI:
     )
 
     # Milo 0.4.3 misrepresents recursive aliases and nullable values in output
-    # schemas. Advertise an object here; _call retains the typed MCPResult.
+    # schemas. Advertise an object here; owner_tool_command retains typed MCPResult.
     @cli.command(
         "start",
         description=(
@@ -128,7 +67,7 @@ def build_cli(runtime: Path) -> CLI:
         Args:
             command_id: Optional stable ID used to retry or query this request.
         """
-        return cast(dict, _call("start", runtime, command_id=command_id))
+        return cast(dict, owner_tool_command("start", runtime, command_id=command_id))
 
     @cli.command(
         "status",
@@ -142,7 +81,7 @@ def build_cli(runtime: Path) -> CLI:
     )
     def status() -> dict:
         """Read current owner state without changing playback."""
-        return cast(dict, _call("status", runtime))
+        return cast(dict, owner_tool_command("status", runtime))
 
     @cli.command(
         "stop",
@@ -162,7 +101,7 @@ def build_cli(runtime: Path) -> CLI:
         Args:
             command_id: Optional stable ID used to retry or query this request.
         """
-        return cast(dict, _call("stop", runtime, command_id=command_id))
+        return cast(dict, owner_tool_command("stop", runtime, command_id=command_id))
 
     return cli
 

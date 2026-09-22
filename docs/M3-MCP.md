@@ -61,11 +61,37 @@ Milo boundary. Milo 0.4.3 cannot faithfully render TellyQ's recursive IPC
 aliases and nullable nested evidence into JSON Schema; the actual structured
 payload remains the versioned typed contract in `tellyq/models.py`.
 
-The repository now has offline subprocess coverage for the real initialize,
-tools/list, tools/call, invalid-argument and unknown-tool protocol paths, plus
-owner-command parity and owner survival after MCP exit. Packaging smoke also
-installs the optional extra and checks the built wheel's stdio handshake and
-tool list from outside the checkout. Full CLI/direct-Python parity review,
-Milo verification against the packaged entry point, and one
-supervised hardware start/status/stop run remain to be completed. Pause/resume,
-planner/UI routes, hosted transports and live acceptance are outside this slice.
+## Bounded command-parity batch
+
+The M3 batch after PR #44 keeps the existing foreground-owner CLI and the
+three-tool MCP surface. `service_cli.owner_tool_command` now owns the shared
+start/status/stop names, command-ID validation, safe structured error codes,
+and dispatch to `owner_command`. The direct Python caller receives the typed
+`MCPResult`; MCP sends that result unchanged. The owner CLI uses the same
+dispatch and retains its existing successful `IPCResponse` JSON. On a local
+validation or transport failure it emits the shared structured error. Owner
+defaults remain in one place: stable queue-derived start ID and a new stop ID
+unless the caller supplies one. Reusing an explicit ID preserves the owner's
+retry/ticket semantics. An unavailable owner remains uncertain; the result
+directs the caller to inspect status before retrying.
+
+Offline regression coverage now compares CLI and direct Python outcomes,
+malformed IDs, retries, safe error redaction and unavailable-owner behavior.
+The real stdio tests cover initialize, tools/list, tools/call, invalid arguments,
+unknown tools, clean protocol stdout, and owner survival after MCP exit. The
+isolated wheel smoke checks the installed `tellyq-mcp` entry point's stdio
+handshake and tool list, then runs Milo 0.4.3 `verify` against a shim importing
+the installed wheel. Milo's verifier requires a module-level `CLI` instance;
+the packaged entry point builds its instance after startup runtime selection.
+The shim supplies that instance without changing production startup behavior.
+
+Remaining M3 gates: the legacy direct-playback CLI commands still use their
+historical controller path when no foreground owner is selected, and
+pause/resume, probe, queue, discover, ticket, shutdown and serve are outside
+the three-tool shared definition. A full CLI migration would need an explicit
+decision on those commands' owner routing and compatibility, followed by
+broader parity and schema tests. Do not claim the complete M3 command-definition
+acceptance gate from this slice. One supervised hardware start/status/stop run
+through an actual MCP client is also still required; use the existing quiet
+nature clips and record receiver evidence separately from command receipts and
+the user's visual confirmation. No live playback was performed in this batch.
