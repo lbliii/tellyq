@@ -33,6 +33,9 @@ def test_owner_tool_help_uses_shared_command_specs(tmp_path, monkeypatch, capsys
         assert command_help.value.code == 0
         text = capsys.readouterr().out
         assert ("--command-id" in text) == spec.accepts_command_id
+        assert "--owner" not in text
+        assert "--device" not in text
+        assert "--seconds" not in text
     assert not runtime.exists()
 
 
@@ -61,7 +64,7 @@ def test_invalid_window_never_dispatches(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "execute", dispatch)
     monkeypatch.setattr(cli, "RUNTIME", tmp_path / "runtime")
     with pytest.raises(SystemExit) as result:
-        cli.main(["start", "--seconds", "0"])
+        cli.main(["probe", "--device", "00000000-0000-4000-8000-000000000001", "--seconds", "0"])
     assert result.value.code == 2
     assert "invalid choice" in capsys.readouterr().err
     dispatch.assert_not_called()
@@ -70,7 +73,7 @@ def test_invalid_window_never_dispatches(tmp_path, monkeypatch, capsys):
 def test_lock_failure_still_produces_json(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "RUNTIME", tmp_path)
     monkeypatch.setattr(cli, "execute", Mock(side_effect=RuntimeError("Command already running")))
-    assert cli.main(["status"]) == 1
+    assert cli.main(["probe", "--device", "00000000-0000-4000-8000-000000000001"]) == 1
     assert json.loads(capsys.readouterr().out)["error"]["type"] == "RuntimeError"
 
 

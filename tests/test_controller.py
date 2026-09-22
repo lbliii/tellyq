@@ -269,7 +269,7 @@ def test_cli_setup_failure_still_returns_versioned_json(tmp_path, monkeypatch, c
     unavailable = tmp_path / "not-a-directory"
     unavailable.write_text("blocked")
     monkeypatch.setattr(__main__, "RUNTIME", unavailable)
-    assert __main__.main(["status"]) == 1
+    assert __main__.main(["probe", "--device", "00000000-0000-4000-8000-000000000001"]) == 1
     result = json.loads(capsys.readouterr().out)
     assert result["schema_version"] == 1
     assert result["error"]["type"] == "FileExistsError"

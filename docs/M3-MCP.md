@@ -67,10 +67,10 @@ The M3 batch after PR #44 keeps the existing foreground-owner CLI and the
 three-tool MCP surface. `service_cli.owner_tool_command` now owns the shared
 start/status/stop names, command-ID validation, safe structured error codes,
 and dispatch to `owner_command`. The direct Python caller receives the typed
-`MCPResult`; MCP sends that result unchanged. The owner CLI uses the same
-dispatch and retains its existing successful `IPCResponse` JSON. On a local
-validation or transport failure it emits the shared structured error. Owner
-defaults remain in one place: stable queue-derived start ID and a new stop ID
+`MCPResult`; MCP sends that result unchanged. At that stage the owner CLI used
+the same dispatch but printed the successful `IPCResponse` JSON directly. The
+pre-alpha CLI now prints the full shared result. Owner defaults remain in one
+place: stable queue-derived start ID and a new stop ID
 unless the caller supplies one. Reusing an explicit ID preserves the owner's
 retry/ticket semantics. An unavailable owner remains uncertain; the result
 directs the caller to inspect status before retrying.
@@ -90,36 +90,35 @@ It selects CLI help and `--command-id` availability, Milo registration names,
 descriptions, and MCP hints from the same definitions. Milo continues to infer
 the input schema from the registered Python handler signature; the spec selects
 the handler shape so `status` has no command ID and `start`/`stop` do. Tests
-compare both surfaces to the shared metadata. The `device` override remains a
-legacy CLI-only safeguard; MCP keeps its startup-fixed owner runtime and does
-not accept a device or runtime argument. The generic object output schema remains
-the honest Milo 0.4.3 boundary described above.
+compare both surfaces to the shared metadata. The temporary CLI-only `device`
+override for these three tools has been removed. MCP keeps its startup-fixed
+owner runtime and does not accept a device or runtime argument. The generic
+object output schema remains the honest Milo 0.4.3 boundary described above.
 
-The standard `tellyq` CLI now accepts `--owner` on `start`, `status`, and `stop`.
-For example, `tellyq --runtime /absolute/owner/runtime status --owner` requires
-the foreground owner and prints the same `MCPResult` envelope as direct Python
+The standard `tellyq` CLI now always routes `start`, `status`, and `stop` to the
+foreground owner and prints the same `MCPResult` envelope as direct Python
 dispatch and MCP, including command-ID validation and unavailable-owner errors.
-If the owner is absent, it returns `owner_unavailable` without trying direct
-playback. This explicit mode is useful for clients that require one contract and
-must never fall back to the legacy controller. The ordinary commands retain
-their existing automatic owner selection and historical success JSON.
+For example, `tellyq --runtime /absolute/owner/runtime status` returns
+`owner_unavailable` when the owner is absent and never starts direct playback.
+This pre-alpha simplification removes the former automatic direct-controller
+fallback and the temporary `--owner` flag. `probe` remains the explicit direct
+diagnostic; `discover` and `queue` are setup commands.
 
 The `tellyq-mcp` entry point also accepts these three names as Milo shell
 commands. Its default terminal output is now the same JSON `MCPResult` returned
-by Python, MCP and `tellyq --owner`, and it exits nonzero when `ok` is false.
+by Python, MCP and `tellyq`, and it exits nonzero when `ok` is false.
 Milo still owns argument parsing, command registration and MCP discovery;
 the terminal renderer only changes the shell presentation. Offline subprocess
 tests compare successful commands, invalid IDs and an unavailable owner with
 direct Python results while allowing only local Unix sockets.
 
-Remaining M3 gates: the legacy direct-playback CLI commands still use their
-historical controller path when no foreground owner is selected, and
-pause/resume, probe, queue, discover, ticket, shutdown and serve are outside
-the three-tool shared definition. A full CLI migration would need an explicit
-decision on those commands' owner routing and compatibility, followed by
-broader parity and schema tests. Do not claim the complete M3 command-definition
-acceptance gate from this slice. A supervised hardware start/status/stop run
-through an actual MCP client has now passed its machine-side checks, and the
+Remaining M3 gate: review the advertised Milo input/output schema against the
+versioned result contract and finish parity tests for the intended three-tool
+owner surface. `pause`/`resume`, `ticket`, `shutdown` and `serve` are owner
+administration; `probe`, `queue` and `discover` are diagnostics/setup, not MCP
+playback tools. Do not claim the complete M3 command-definition acceptance gate
+from this slice. A supervised hardware start/status/stop run through an actual
+MCP client has now passed its machine-side checks, and the
 user separately confirmed visible playback and the home screen after stop. See
 the [second MCP checkpoint](M3-MCP-SECOND-CHECKPOINT.md) for the evidence and
 remaining acceptance limits.

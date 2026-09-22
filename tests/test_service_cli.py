@@ -50,7 +50,6 @@ def test_start_retry_does_not_select_successor():
 @pytest.mark.parametrize("command", ["start", "status", "stop", "pause", "resume"])
 def test_selected_ipc_failure_never_falls_back(tmp_path, monkeypatch, capsys, command):
     monkeypatch.setattr(cli, "RUNTIME", tmp_path)
-    (tmp_path / "runner.sock").symlink_to(tmp_path / "missing")
     direct = Mock()
     monkeypatch.setattr(cli, "execute", direct)
     monkeypatch.setattr(
@@ -107,7 +106,9 @@ def test_explicit_runtime_and_ipc_options(monkeypatch, tmp_path, capsys):
     assert command.call_args.kwargs["command_id"] == "pause-a"
     capsys.readouterr()
     command.reset_mock()
-    assert cli.main(["--runtime", str(runtime), "start", "--seconds", "10"]) == 1
+    with pytest.raises(SystemExit) as invalid:
+        cli.main(["--runtime", str(runtime), "start", "--seconds", "10"])
+    assert invalid.value.code == 2
     command.assert_not_called()
 
 
@@ -115,9 +116,10 @@ def test_owner_command_id_without_owner_never_dispatches(monkeypatch, tmp_path, 
     monkeypatch.setattr(cli, "RUNTIME", tmp_path)
     direct = Mock()
     monkeypatch.setattr(cli, "execute", direct)
+    monkeypatch.setattr(service_cli, "owner_command", Mock(side_effect=IPCUnavailable("missing")))
     assert cli.main(["start", "--command-id", "retry"]) == 1
     direct.assert_not_called()
-    capsys.readouterr()
+    assert json.loads(capsys.readouterr().out)["code"] == "owner_unavailable"
 
 
 def test_serve_validates_before_composition(monkeypatch, tmp_path, capsys):
@@ -145,7 +147,7 @@ def test_owner_tool_python_and_cli_parity(monkeypatch, tmp_path, capsys, action)
     if action != "status":
         args.extend(["--command-id", "retry-a"])
     assert cli.main(args) == 0
-    assert json.loads(capsys.readouterr().out) == direct["response"]
+    assert json.loads(capsys.readouterr().out) == direct
     assert owner.call_count == 2
     assert owner.call_args.kwargs["command_id"] == ("retry-a" if action != "status" else None)
 
@@ -181,15 +183,13 @@ def test_owner_tool_retries_and_uncertain_failure(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("action", ["start", "status", "stop"])
-def test_explicit_owner_mode_has_shared_result_without_endpoint(
-    monkeypatch, tmp_path, capsys, action
-):
+def test_owner_commands_have_shared_result_without_endpoint(monkeypatch, tmp_path, capsys, action):
     direct = Mock()
     monkeypatch.setattr(cli, "execute", direct)
     owner = Mock(side_effect=IPCUnavailable("private socket address"))
     monkeypatch.setattr(service_cli, "owner_command", owner)
     expected = service_cli.owner_tool_command(action, tmp_path)
-    assert cli.main(["--runtime", str(tmp_path), action, "--owner"]) == 1
+    assert cli.main(["--runtime", str(tmp_path), action]) == 1
     assert json.loads(capsys.readouterr().out) == expected
     assert expected["code"] == "owner_unavailable"
     assert "private socket address" not in str(expected)
@@ -197,20 +197,20 @@ def test_explicit_owner_mode_has_shared_result_without_endpoint(
 
 
 @pytest.mark.parametrize("action", ["start", "status", "stop"])
-def test_explicit_owner_mode_matches_python_success(monkeypatch, tmp_path, capsys, action):
+def test_owner_commands_match_python_success(monkeypatch, tmp_path, capsys, action):
     response = {"schema_version": 1, "ok": True, "code": "accepted", "ticket_id": "same"}
     monkeypatch.setattr(service_cli, "owner_command", Mock(return_value=response))
     expected = service_cli.owner_tool_command(action, tmp_path)
-    assert cli.main(["--runtime", str(tmp_path), action, "--owner"]) == 0
+    assert cli.main(["--runtime", str(tmp_path), action]) == 0
     assert json.loads(capsys.readouterr().out) == expected
 
 
-def test_explicit_owner_mode_validates_id_without_dispatch(monkeypatch, tmp_path, capsys):
+def test_owner_commands_validate_id_without_dispatch(monkeypatch, tmp_path, capsys):
     direct = Mock()
     owner = Mock()
     monkeypatch.setattr(cli, "execute", direct)
     monkeypatch.setattr(service_cli, "owner_command", owner)
-    assert cli.main(["--runtime", str(tmp_path), "start", "--owner", "--command-id", "bad id"]) == 1
+    assert cli.main(["--runtime", str(tmp_path), "start", "--command-id", "bad id"]) == 1
     result = json.loads(capsys.readouterr().out)
     assert result == service_cli.owner_tool_command("start", tmp_path, command_id="bad id")
     direct.assert_not_called()
