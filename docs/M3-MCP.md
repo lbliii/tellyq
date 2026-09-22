@@ -104,6 +104,14 @@ playback. This explicit mode is useful for clients that require one contract and
 must never fall back to the legacy controller. The ordinary commands retain
 their existing automatic owner selection and historical success JSON.
 
+The `tellyq-mcp` entry point also accepts these three names as Milo shell
+commands. Its default terminal output is now the same JSON `MCPResult` returned
+by Python, MCP and `tellyq --owner`, and it exits nonzero when `ok` is false.
+Milo still owns argument parsing, command registration and MCP discovery;
+the terminal renderer only changes the shell presentation. Offline subprocess
+tests compare successful commands, invalid IDs and an unavailable owner with
+direct Python results while allowing only local Unix sockets.
+
 Remaining M3 gates: the legacy direct-playback CLI commands still use their
 historical controller path when no foreground owner is selected, and
 pause/resume, probe, queue, discover, ticket, shutdown and serve are outside

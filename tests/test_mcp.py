@@ -178,6 +178,55 @@ def _notify(process: subprocess.Popen[str], notification: dict[str, Any]) -> Non
     process.stdin.flush()
 
 
+def test_milo_shell_commands_match_python_results_and_exit_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    del tmp_path
+    monkeypatch.setattr(socket, "socket", _unix_socket)
+    directory = tempfile.TemporaryDirectory(prefix="tq-mcp-cli-", dir="/tmp")
+    owner = FakeOwner(Path(directory.name) / "owner")
+    environment = os.environ.copy()
+    environment["TELLYQ_OWNER_RUNTIME"] = str(owner.runtime)
+    environment["PYTHONPATH"] = str(Path(__file__).parents[1])
+
+    def invoke(action: str, command_id: str | None = None) -> subprocess.CompletedProcess[str]:
+        args = [sys.executable, "-c", _CHILD_BOOTSTRAP, action]
+        if command_id is not None:
+            args.extend(["--command-id", command_id])
+        return subprocess.run(
+            args,
+            cwd=Path(__file__).parents[1],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+
+    try:
+        for action in ("status", "start", "stop"):
+            command_id = f"shell-{action}" if action != "status" else None
+            actual = invoke(action, command_id)
+            assert actual.returncode == 0
+            assert actual.stderr == ""
+            assert json.loads(actual.stdout) == service_cli.owner_tool_command(
+                action, owner.runtime, command_id=command_id
+            )
+        invalid = invoke("start", "bad id")
+        assert invalid.returncode == 1
+        assert json.loads(invalid.stdout)["code"] == "invalid_command_id"
+        owner.close()
+        unavailable = invoke("status")
+        assert unavailable.returncode == 1
+        assert json.loads(unavailable.stdout) == service_cli.owner_tool_command(
+            "status", owner.runtime
+        )
+    finally:
+        if not owner.closed.is_set():
+            owner.close()
+        directory.cleanup()
+
+
 def test_stdio_handshake_tools_and_owner_parity(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

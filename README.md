@@ -138,6 +138,8 @@ foundation](docs/M3-MCP.md) for the remaining parity and live checklist.
 For a regular CLI call that requires this same owner contract, pass `--owner`
 after `start`, `status`, or `stop`. It returns the shared structured result and
 fails safely if the owner is unavailable; it never starts direct playback.
+The `tellyq-mcp` entry point accepts those commands in a shell as well, returning
+the same JSON result and a nonzero exit status on failure.
 
 `queue` only writes the local one-item queue. `start` plays it and observes for
 30 seconds, then exits while playback continues. `status` obtains fresh events
