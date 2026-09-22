@@ -54,22 +54,22 @@ remote's active-app report to the Google TV launcher.
 | Capability | Result on this device and account |
 | --- | --- |
 | Software app launch | Verified by remote app report and user-visible Netflix profile screen |
-| Exact title launch | Unknown; the title link errored and the direct-watch link reached profile selection before `tvq-prfls-101`. After the user refreshed Netflix sign-in, a new direct-watch command opened Netflix, but no title outcome was confirmed. |
+| Exact title launch | Not achieved; after refreshed sign-in, the direct-watch link reached profile selection, and selecting the highlighted profile opened that profile's Netflix home screen rather than *Anaconda* |
 | Title identity and playback state | Unavailable in passive Cast/remote telemetry in this session |
 | Progress and completion | Unverified |
 | Stop or leave app | `HOME` returned to the Google TV launcher; stopping active Netflix playback was not tested |
-| Authentication/setup | One-time remote pairing succeeded; Netflix profile entry blocked by app error |
+| Authentication/setup | One-time remote pairing succeeded; profile selection required a remote command after the user refreshed Netflix sign-in |
 
-The user cleared Netflix cookies and signed in again. One fresh
-`watch/82018723` command reopened Netflix, but remote and passive Cast
-telemetry again reported only the app, with `UNKNOWN` media state, no content
-ID, and zero position. No visible outcome was confirmed before the bounded
-attempt ended. A `HOME` command again returned the active-app report to the
-Google TV launcher. This retry neither proves nor rules out exact-title
-launch; it does show that this route has no usable automatic playback evidence
-in the tested setup.
+The user cleared Netflix cookies and signed in again. A fresh
+`watch/82018723` command reopened the profile selector. With the user's
+authorization, TellyQ sent one select command for the default highlighted
+profile. The user reported seeing that profile's Netflix home screen rather
+than *Anaconda*. Remote and passive Cast telemetry reported only the Netflix
+app, with `UNKNOWN` media state, no content ID, and zero position. A `HOME`
+command returned the active-app report to the Google TV launcher.
 
-**Decision:** exact launch remains unknown, and the native remote/Cast route
-does not yet support unattended advancement. The initial profile error is a
-separate account/device issue. Compare Disney+ and Prime Video before
-implementing a subscription adapter.
+**Decision:** this route provides assisted app launch, but the tested exact
+title link did not reach the requested movie after profile selection and no
+usable playback evidence is exposed. It does not support unattended
+advancement. The initial profile error is a separate account/device issue.
+Compare Disney+ and Prime Video before implementing a subscription adapter.
