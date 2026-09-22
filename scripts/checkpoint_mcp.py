@@ -303,9 +303,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--live", action="store_true", help="Explicitly enable start and guarded stop"
     )
-    parser.add_argument("--seconds", type=float, default=20)
+    parser.add_argument("--seconds", type=float, default=75)
     parser.add_argument("--poll-seconds", type=float, default=0.5)
-    parser.add_argument("--cleanup-seconds", type=float, default=15)
+    parser.add_argument("--cleanup-seconds", type=float, default=30)
     args = parser.parse_args(argv)
     if (args.mode == "start") != args.live:
         parser.error("start requires --live; trace does not accept --live")

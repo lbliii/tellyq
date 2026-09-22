@@ -146,11 +146,12 @@ uv run --locked --extra mcp python scripts/checkpoint_mcp.py start --live \
   --output runtime/mcp-live-1 --code-revision REVISION
 ```
 
-The default start observation window is 20 seconds, followed by up to 15
-seconds for stop evidence. Both are bounded options. The private summary
+The default start observation window is 75 seconds, followed by up to 30
+seconds for stop evidence. Both are bounded options; the runner stops early
+when it sees the required evidence. The private summary
 reports command acknowledgement, receiver playback evidence, stop observation,
 and owner survival separately. Its `visual_confirmation` remains null and
 `live_acceptance` remains false until the operator records the user's visible
 TV confirmation and reviews the journal. The offline test uses a fake Unix
-owner and real Milo stdio; it never controls a receiver. The supervised run
-has not yet been requested or performed.
+owner and real Milo stdio; it never controls a receiver. The first supervised
+run and its timing limitation are recorded in [the M3 MCP checkpoint](M3-MCP-CHECKPOINT.md).
