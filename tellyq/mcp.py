@@ -7,6 +7,7 @@ usable without the interface dependency installed.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from collections.abc import Callable
@@ -51,9 +52,12 @@ def build_cli(runtime: Path) -> CLI:
     # schemas. Advertise an object here; owner_tool_command retains typed MCPResult.
     for spec in OWNER_TOOL_SPECS:
         handler = _handler(spec, runtime)
-        cli.command(spec.name, description=spec.description, annotations=spec.annotations())(
-            handler
-        )
+        cli.command(
+            spec.name,
+            description=spec.description,
+            annotations=spec.annotations(),
+            terminal_renderer=lambda result, _context: json.dumps(result, indent=2),
+        )(handler)
 
     return cli
 
@@ -85,8 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         sys.stderr.write(f"{exc}\n")
         return 2
-    cli.run(argv)
-    return 0
+    result = cli.run(argv)
+    return int(isinstance(result, dict) and result.get("ok") is False)
 
 
 __all__ = ["build_cli", "configured_runtime", "main"]
