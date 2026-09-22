@@ -3,7 +3,8 @@
 **M2 is closed with a known reliability limitation as of 2026-09-21.** The
 [closeout record](M2-ACCEPTANCE.md) counts three completed three-item sessions
 across four attempts and preserves the stalled attempt in
-[issue #42](https://github.com/lbliii/tellyq/issues/42). M3 is ready to begin.
+[issue #42](https://github.com/lbliii/tellyq/issues/42). M3's first MCP foundation
+is implemented and tested offline; its full acceptance gate remains open.
 Further provider diagnostics are bounded bug work; they do not add M2 requirements.
 
 Updated 2026-09-21. M0's hardware proof is verified. M1's domain contracts,
@@ -38,7 +39,7 @@ are proven on the actual device. A graphical interface is optional.
 | M0 | One real program under software control | Exact Bob Ross ID/title and advancing position; user confirms visible playback and automatic TV switching; observed YouTube exit after stop | **Passed** |
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
 | M2 | Reliable unattended YouTube queue | Three completed three-item sessions out of four attempts; controls, durable history and bounded recovery verified; earlier failures retained | **Closed with known reliability limitation**: [enqueue stall #42](https://github.com/lbliii/tellyq/issues/42) remains open; dependable unattended use is not yet established |
-| M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | **Ready to begin** after qualified M2 closeout; not implemented |
+| M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | **Foundation implemented**: bounded stdio start/status/stop slice is covered offline; full parity, Milo packaging review and live acceptance remain open |
 | M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
 | M5 | One subscription service integrated | Two exact titles, three start/status/stop runs, and two cross-service handoffs pass the supported autonomy level | M2 + M4 |
 | M6 | Mood becomes a useful evening of TV | Ten planning scenarios satisfy constraints; user accepts three real lineups; every item resolves to a known provider ID and supported control route | M3; YouTube can ship before M5 |

@@ -441,6 +441,23 @@ class IPCResponse(TypedDict):
     ticket_id: NotRequired[str]
 
 
+class MCPError(TypedDict):
+    """Safe, machine-readable error returned by the optional MCP surface."""
+
+    type: str
+    message: str
+
+
+class MCPResult(TypedDict):
+    """The MCP tool result mirrors the foreground owner's IPC response."""
+
+    schema_version: Literal[1]
+    ok: bool
+    code: str
+    response: NotRequired[IPCResponse]
+    error: NotRequired[MCPError]
+
+
 class ServiceCheckpointTiming(TypedDict):
     action: IPCAction
     submitted_ms: float

@@ -17,6 +17,7 @@ import tellyq.application
 import tellyq.controller
 import tellyq.session_store
 import tellyq.cast_backend
+import tellyq.mcp
 import tellyq.domain.policy
 import tellyq.__main__
 """

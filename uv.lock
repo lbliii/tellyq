@@ -237,6 +237,27 @@ wheels = [
 ]
 
 [[package]]
+name = "kida-templates"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/e8/726ec799566935572778b068921614e76151a685a8feb3f2f4e316a8ecbd/kida_templates-0.12.0.tar.gz", hash = "sha256:e784e0fbc7fc35c343c0d75f680e0af263ba06ae5f99a1ac372637036f56db57", size = 680371, upload-time = "2026-07-13T16:54:31.657Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a4/41/6676a8e92d82f60dea62a527e9e0530ca2cf370bf9fe213f5f4263c290f7/kida_templates-0.12.0-py3-none-any.whl", hash = "sha256:75a87dd444d4d08aa9b5b51f78c2ed3576a71b85192ed56b97ce22ed7a23a6e4", size = 455794, upload-time = "2026-07-13T16:54:29.935Z" },
+]
+
+[[package]]
+name = "milo-cli"
+version = "0.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "kida-templates" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/06/5d/07eb59bd0264a274bca03d814efe5f1b45e25d63c64185e7e1e254697997/milo_cli-0.4.3.tar.gz", hash = "sha256:e570da76f55175f613ebb943cb88a1c09e1c7e2cb7f47ecce494be334208b85c", size = 302701, upload-time = "2026-07-13T17:46:32.375Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a9/ba/c776540be97ea91602c9b2fb571533a01dd334837a89eb6871ac4a671f22/milo_cli-0.4.3-py3-none-any.whl", hash = "sha256:3c25e8422fe8bff928791bc823a2714af39f0382b545b24ad318f2a900afc3db", size = 173556, upload-time = "2026-07-13T17:46:30.82Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
@@ -464,9 +485,15 @@ dependencies = [
     { name = "pychromecast" },
 ]
 
+[package.optional-dependencies]
+mcp = [
+    { name = "milo-cli" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "build" },
+    { name = "milo-cli" },
     { name = "poethepoet" },
     { name = "prek" },
     { name = "pytest" },
@@ -478,11 +505,16 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pychromecast", specifier = "==14.0.10" }]
+requires-dist = [
+    { name = "milo-cli", marker = "extra == 'mcp'", specifier = "==0.4.3" },
+    { name = "pychromecast", specifier = "==14.0.10" },
+]
+provides-extras = ["mcp"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "build", specifier = ">=1.2,<2" },
+    { name = "milo-cli", specifier = "==0.4.3" },
     { name = "poethepoet", specifier = ">=0.29,<1" },
     { name = "prek", specifier = ">=0.2,<1" },
     { name = "pytest", specifier = ">=9,<10" },
