@@ -111,10 +111,10 @@ the three-tool shared definition. A full CLI migration would need an explicit
 decision on those commands' owner routing and compatibility, followed by
 broader parity and schema tests. Do not claim the complete M3 command-definition
 acceptance gate from this slice. A supervised hardware start/status/stop run
-through an actual MCP client has now passed its machine-side checks; the user's
-visual observation is assessed separately. See the
-[second MCP checkpoint](M3-MCP-SECOND-CHECKPOINT.md) for the evidence and remaining
-acceptance limits.
+through an actual MCP client has now passed its machine-side checks, and the
+user separately confirmed visible playback and the home screen after stop. See
+the [second MCP checkpoint](M3-MCP-SECOND-CHECKPOINT.md) for the evidence and
+remaining acceptance limits.
 
 ## Prepared supervised MCP checkpoint
 
@@ -151,10 +151,11 @@ The default start observation window is 75 seconds, followed by up to 30
 seconds for stop evidence. Both are bounded options; the runner stops early
 when it sees the required evidence. The private summary
 reports command acknowledgement, receiver playback evidence, stop observation,
-and owner survival separately. Its `visual_confirmation` remains null and
-`live_acceptance` remains false until the operator records the user's visible
-TV confirmation and reviews the journal. The offline test uses a fake Unix
-owner and real Milo stdio; it never controls a receiver. The first supervised
+and owner survival separately. Its generated `visual_confirmation` and
+`live_acceptance` fields are null and false; a separate review records the
+user's visible TV confirmation and checks the journal. The offline test uses a
+fake Unix owner and real Milo stdio; it never controls a receiver. The first supervised
 run and its timing limitation are recorded in [the first M3 MCP
 checkpoint](M3-MCP-CHECKPOINT.md). The second supervised run passed its timed
-machine-side checks; see [its record](M3-MCP-SECOND-CHECKPOINT.md).
+machine-side checks and the user confirmed visible playback and the home
+screen after stop; see [its record](M3-MCP-SECOND-CHECKPOINT.md).
