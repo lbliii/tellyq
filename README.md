@@ -16,11 +16,11 @@ evidence and separate user visual confirmation. CLI, Python, Milo shell, and
 MCP now share the result envelope; the advertised MCP schema describes its
 stable fields while leaving the nested owner response opaque. See the
 [M3 acceptance record](docs/M3-ACCEPTANCE.md).
-M4's Netflix probe classified that route as assisted app launch. Plex is now the
-selected second-provider candidate because its server exposes library identity and
-playback sessions. The [Plex checkpoint](docs/M4-PLEX-PROBE.md) verifies the
-signed-in Google TV client, but found no local server and remains at the
-trusted-install and test-library setup gate before adapter work.
+M4's Netflix probe classified that route as assisted app launch. The
+[Plex checkpoint](docs/M4-PLEX-PROBE.md) verifies its signed-in Google TV client
+and records Plex as an optional personal-library route; it does not provide the
+commercial streaming catalog TellyQ is trying to program. HBO Max and Disney+ are
+the next bounded browser-to-Cast candidates; neither is yet an open automation API.
 
 ## First playback proof (M0)
 

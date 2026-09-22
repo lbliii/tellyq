@@ -1,10 +1,10 @@
-# M4 Plex feasibility checkpoint
+# M4 Plex personal-library boundary
 
-This checkpoint selects Plex as TellyQ's next provider candidate and records the
-environment gate discovered before adapter work. It is not a Plex adapter or an
-M5 playback acceptance run.
+This checkpoint records where Plex is useful and why it is not TellyQ's next
+commercial-catalog provider. It is not a Plex adapter or an M5 playback
+acceptance run.
 
-## Why Plex is the candidate
+## Why Plex looked promising
 
 Plex exposes the semantic controls that were missing from the Netflix probe.
 Home Assistant's [Plex integration](https://www.home-assistant.io/integrations/plex)
@@ -19,6 +19,9 @@ The supported catalog is the media available through a configured Plex Media
 Server. This route does not provide programmatic access to Netflix, Disney+, or
 other subscription catalogs. Plex's own free streaming catalog is also outside
 this checkpoint until it exposes the same exact-item and playback evidence.
+The user clarified that TellyQ's present goal is programming commercial streaming
+catalogs, rather than maintaining a personal media library. Plex is therefore an
+optional future route, not the selected M4 provider.
 
 ## Environment probe
 
@@ -43,9 +46,9 @@ binary. The archive and all helper scripts remain ignored runtime material.
 Homebrew could not provide an alternate trusted installation because this Mac's
 Xcode license is currently unaccepted.
 
-## Setup gate
+## Optional revisit gate
 
-The next live checkpoint requires:
+If a personal library becomes useful later, a live checkpoint requires:
 
 1. Install Plex Media Server through a macOS path accepted by Gatekeeper, then
    complete Plex's browser-based sign-in and server setup.
@@ -60,10 +63,10 @@ documents the server, account, library, and player setup. Its
 [Companion matrix](https://support.plex.tv/articles/203082707-supported-plex-companion-apps/)
 classifies Android TV and Chromecast as receiver devices.
 
-## Bounded acceptance run
+## Optional bounded acceptance run
 
-Once the setup gate is satisfied, the first experiment will use the existing Cast
-target and the Plex server directly:
+If the revisit gate is satisfied, the experiment will use the existing Cast target
+and the Plex server directly:
 
 1. Discover the server and query the test library without logging secrets.
 2. Resolve one exact title to a stable Plex key.
@@ -78,6 +81,6 @@ target and the Plex server directly:
 Only after steps 1-5 pass should an adapter be added to TellyQ. Natural completion
 is required before Plex can participate in unattended queue advancement.
 
-**Current classification:** promising and server-setup-blocked. The signed-in TV
-client is verified and Plex is the selected M4 candidate, but no server, library,
-exact-title launch, or playback telemetry has yet been observed on this equipment.
+**Current classification:** technically promising for a personal library and out
+of scope for the current commercial-catalog goal. The signed-in TV client is
+verified, but no server or library is needed unless that goal changes.

@@ -40,7 +40,7 @@ on the actual device. A graphical interface is optional.
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
 | M2 | Reliable unattended YouTube queue | Three completed three-item sessions out of four attempts; controls, durable history and bounded recovery verified; earlier failures retained | **Closed with known reliability limitation**: [enqueue stall #42](https://github.com/lbliii/tellyq/issues/42) remains open; dependable unattended use is not yet established |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | **Live hardware checkpoint passed** with user visual confirmation; the three owner commands now share CLI/Python/MCP results, while advertised schema review remains open |
-| M4 | Evidence-based second-provider decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Netflix is assisted only; Plex TV client verified; selected candidate is blocked on trusted server setup |
+| M4 | Evidence-based second-provider decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Netflix is assisted only; Plex is personal-library-only; HBO Max then Disney+ are the next bounded browser-to-Cast probes |
 | M5 | One second provider integrated | Two exact titles, three start/status/stop runs, and two cross-provider handoffs pass the supported autonomy level | M2 + M4 |
 | M6 | Mood becomes a useful evening of TV | Ten planning scenarios satisfy constraints; user accepts three real lineups; every item resolves to a known provider ID and supported control route | M3; YouTube can ship before M5 |
 | M7 | Optional Chirp interface | Queue, now-playing evidence and controls agree with CLI/MCP; live updates reconnect; browser controls do not create another playback owner | M3 + M6 |
@@ -188,14 +188,15 @@ Investigation decision and order:
    reported Google Assistant launching it on this setup. This is a useful lead,
    not proof of a Python API or exact-episode control.
 2. The Netflix probe achieved assisted app launch but not exact-title playback or
-   usable telemetry. The user selected Plex next because a configured server
-   exposes library IDs and playback sessions. The [Plex checkpoint](M4-PLEX-PROBE.md)
-   now verifies the signed-in TV client, but found no local server and remains at
-   its trusted-install and server-account setup gate.
-3. After Plex setup, prove exact-title Cast playback and observations before
-   implementing an adapter. If the local-library model is unsuitable, compare
-   Disney+ and Prime Video using the same checks.
-4. Include Apple TV in the matrix: Apple now documents Android-to-Cast playback.
+   usable telemetry. The [Plex checkpoint](M4-PLEX-PROBE.md) verifies its TV client
+   but records Plex as a personal-library route outside the current goal.
+3. Probe HBO Max first and Disney+ second when the user has access. Both officially
+   support a signed-in browser on the Mac as a Cast sender. Test whether that
+   consumer route can be automated and whether the receiver exposes identity,
+   progress and completion; do not infer an API from a visible Cast button.
+4. Keep Hulu, Paramount+ and Prime Video as lower-priority probes unless one has
+   an already signed-in account and a more direct route on this equipment.
+5. Include Apple TV in the matrix: Apple now documents Android-to-Cast playback.
    The phone's Cast UI alone does not establish Mac/Python control.
 
 Budget at most one focused research pass and one supervised hardware session per
