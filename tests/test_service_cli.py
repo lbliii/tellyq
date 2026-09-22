@@ -178,3 +178,40 @@ def test_owner_tool_retries_and_uncertain_failure(monkeypatch, tmp_path):
     assert result["code"] == "owner_unavailable"
     assert "unknown" in result["error"]["message"]
     assert "private socket address" not in str(result)
+
+
+@pytest.mark.parametrize("action", ["start", "status", "stop"])
+def test_explicit_owner_mode_has_shared_result_without_endpoint(
+    monkeypatch, tmp_path, capsys, action
+):
+    direct = Mock()
+    monkeypatch.setattr(cli, "execute", direct)
+    owner = Mock(side_effect=IPCUnavailable("private socket address"))
+    monkeypatch.setattr(service_cli, "owner_command", owner)
+    expected = service_cli.owner_tool_command(action, tmp_path)
+    assert cli.main(["--runtime", str(tmp_path), action, "--owner"]) == 1
+    assert json.loads(capsys.readouterr().out) == expected
+    assert expected["code"] == "owner_unavailable"
+    assert "private socket address" not in str(expected)
+    direct.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["start", "status", "stop"])
+def test_explicit_owner_mode_matches_python_success(monkeypatch, tmp_path, capsys, action):
+    response = {"schema_version": 1, "ok": True, "code": "accepted", "ticket_id": "same"}
+    monkeypatch.setattr(service_cli, "owner_command", Mock(return_value=response))
+    expected = service_cli.owner_tool_command(action, tmp_path)
+    assert cli.main(["--runtime", str(tmp_path), action, "--owner"]) == 0
+    assert json.loads(capsys.readouterr().out) == expected
+
+
+def test_explicit_owner_mode_validates_id_without_dispatch(monkeypatch, tmp_path, capsys):
+    direct = Mock()
+    owner = Mock()
+    monkeypatch.setattr(cli, "execute", direct)
+    monkeypatch.setattr(service_cli, "owner_command", owner)
+    assert cli.main(["--runtime", str(tmp_path), "start", "--owner", "--command-id", "bad id"]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result == service_cli.owner_tool_command("start", tmp_path, command_id="bad id")
+    direct.assert_not_called()
+    owner.assert_not_called()
