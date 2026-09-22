@@ -110,10 +110,11 @@ pause/resume, probe, queue, discover, ticket, shutdown and serve are outside
 the three-tool shared definition. A full CLI migration would need an explicit
 decision on those commands' owner routing and compatibility, followed by
 broader parity and schema tests. Do not claim the complete M3 command-definition
-acceptance gate from this slice. One supervised hardware start/status/stop run
-through an actual MCP client is also still required; use the existing quiet
-nature clips and record receiver evidence separately from command receipts and
-the user's visual confirmation. No live playback was performed in this batch.
+acceptance gate from this slice. A supervised hardware start/status/stop run
+through an actual MCP client has now passed its machine-side checks; the user's
+visual observation is assessed separately. See the
+[second MCP checkpoint](M3-MCP-SECOND-CHECKPOINT.md) for the evidence and remaining
+acceptance limits.
 
 ## Prepared supervised MCP checkpoint
 
@@ -154,4 +155,6 @@ and owner survival separately. Its `visual_confirmation` remains null and
 `live_acceptance` remains false until the operator records the user's visible
 TV confirmation and reviews the journal. The offline test uses a fake Unix
 owner and real Milo stdio; it never controls a receiver. The first supervised
-run and its timing limitation are recorded in [the M3 MCP checkpoint](M3-MCP-CHECKPOINT.md).
+run and its timing limitation are recorded in [the first M3 MCP
+checkpoint](M3-MCP-CHECKPOINT.md). The second supervised run passed its timed
+machine-side checks; see [its record](M3-MCP-SECOND-CHECKPOINT.md).
