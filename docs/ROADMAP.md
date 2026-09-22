@@ -28,9 +28,9 @@ Describe a mood and let Cueby assemble a program of familiar favorites and adjac
 discoveries. TellyQ plays that program on the existing TV, reports what it actually
 observes, and handles interruption without silently losing or repeating items.
 
-The smallest useful release delivers this on YouTube. Cross-service programming
-adds a subscription service only after its launch and observation capabilities
-are proven on the actual device. A graphical interface is optional.
+The smallest useful release delivers this on YouTube. Cross-provider programming
+adds another source only after its launch and observation capabilities are proven
+on the actual device. A graphical interface is optional.
 
 ## Milestone scoreboard
 
@@ -40,8 +40,8 @@ are proven on the actual device. A graphical interface is optional.
 | M1 | Typed core with explicit contracts | Existing behavior preserved; core runs against real and fake adapters; schemas, errors and state transitions have contract tests; lint/type/tests pass | **Passed at `71a3c39`**; strict ad-free playback proof remains limited by unknown ad telemetry |
 | M2 | Reliable unattended YouTube queue | Three completed three-item sessions out of four attempts; controls, durable history and bounded recovery verified; earlier failures retained | **Closed with known reliability limitation**: [enqueue stall #42](https://github.com/lbliii/tellyq/issues/42) remains open; dependable unattended use is not yet established |
 | M3 | Cueby controls the same functions through MCP | CLI/Python/MCP parity, real stdio handshake and one live start/status/stop session pass; long playback outlives individual tool calls | **Live hardware checkpoint passed** with user visual confirmation; the three owner commands now share CLI/Python/MCP results, while advertised schema review remains open |
-| M4 | Evidence-based subscription-service decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Research starts now; live probes after M1 |
-| M5 | One subscription service integrated | Two exact titles, three start/status/stop runs, and two cross-service handoffs pass the supported autonomy level | M2 + M4 |
+| M4 | Evidence-based second-provider decision | Device/service/control-route matrix; bounded experiments; choose a supported route or document a specific blocker | Netflix is assisted only; Plex is personal-library-only; HBO Max then Disney+ are the next bounded browser-to-Cast probes |
+| M5 | One second provider integrated | Two exact titles, three start/status/stop runs, and two cross-provider handoffs pass the supported autonomy level | M2 + M4 |
 | M6 | Mood becomes a useful evening of TV | Ten planning scenarios satisfy constraints; user accepts three real lineups; every item resolves to a known provider ID and supported control route | M3; YouTube can ship before M5 |
 | M7 | Optional Chirp interface | Queue, now-playing evidence and controls agree with CLI/MCP; live updates reconnect; browser controls do not create another playback owner | M3 + M6 |
 | M8 | Dependable personal release | Three evenings of at least 60 minutes, ten verified handoffs, restart recovery, no duplicate starts or false completion, reproducible install and troubleshooting | M2 + M3 + M6; M5 for cross-service claims |
@@ -182,14 +182,21 @@ First identify the Chromecast generation, whether Android/Google TV is present,
 the Samsung model, existing apps, account tier and available control endpoints.
 Keep addresses and pairing data local. App launch is only one column in the matrix.
 
-Recommended investigation order:
+Investigation decision and order:
 
 1. Netflix is the first **short feasibility probe**, because the user has already
    reported Google Assistant launching it on this setup. This is a useful lead,
    not proof of a Python API or exact-episode control.
-2. Compare Disney+ and Prime Video using the same checks; test the one with an
-   identifiable software launch route first. Neither is yet established as easier.
-3. Include Apple TV in the matrix: Apple now documents Android-to-Cast playback.
+2. The Netflix probe achieved assisted app launch but not exact-title playback or
+   usable telemetry. The [Plex checkpoint](M4-PLEX-PROBE.md) verifies its TV client
+   but records Plex as a personal-library route outside the current goal.
+3. Probe HBO Max first and Disney+ second when the user has access. Both officially
+   support a signed-in browser on the Mac as a Cast sender. Test whether that
+   consumer route can be automated and whether the receiver exposes identity,
+   progress and completion; do not infer an API from a visible Cast button.
+4. Keep Hulu, Paramount+ and Prime Video as lower-priority probes unless one has
+   an already signed-in account and a more direct route on this equipment.
+5. Include Apple TV in the matrix: Apple now documents Android-to-Cast playback.
    The phone's Cast UI alone does not establish Mac/Python control.
 
 Budget at most one focused research pass and one supervised hardware session per
@@ -200,7 +207,7 @@ Do not continue an indefinite compatibility hunt.
 For every service × device × route, record exact-title launch, identity, state,
 progress, completion, stop, auth/setup effort, takeover handling and test evidence.
 Classify it as **automatable**, **assisted**, **blocked**, or **unknown**. Choose the
-first subscription adapter using those results. Preserve limitations in its
+first second-provider adapter using those results. Preserve limitations in its
 capabilities. If none qualifies, continue useful YouTube programming and present
 the smallest concrete setup/hardware tradeoff before expanding scope.
 
@@ -216,7 +223,7 @@ Acceptance:
 
 - Two titles and three separate start/status/stop attempts demonstrate the claimed
   capabilities. Full automatic queueing requires a verified end signal as well.
-- Exercise YouTube → subscription service and the reverse direction. Old provider
+- Exercise YouTube → second provider and the reverse direction. Old provider
   callbacks cannot change the new session or trigger a second launch.
 - A missing capability produces a precise unsupported/attention-required outcome.
   An assisted adapter can ship, but does not pass unattended cross-service acceptance.

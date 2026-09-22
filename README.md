@@ -16,6 +16,11 @@ evidence and separate user visual confirmation. CLI, Python, Milo shell, and
 MCP now share the result envelope; the advertised MCP schema describes its
 stable fields while leaving the nested owner response opaque. See the
 [M3 acceptance record](docs/M3-ACCEPTANCE.md).
+M4's Netflix probe classified that route as assisted app launch. The
+[Plex checkpoint](docs/M4-PLEX-PROBE.md) verifies its signed-in Google TV client
+and records Plex as an optional personal-library route; it does not provide the
+commercial streaming catalog TellyQ is trying to program. HBO Max and Disney+ are
+the next bounded browser-to-Cast candidates; neither is yet an open automation API.
 
 ## First playback proof (M0)
 
@@ -94,7 +99,7 @@ visible advancement and audible nature sound in the distinct-video investigation
 
 For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and
 [architecture direction](docs/ARCHITECTURE.md). They cover typed contracts,
-reliable queueing, Milo CLI/MCP, subscription-service experiments, Cueby's
+reliable queueing, Milo CLI/MCP, second-provider experiments, Cueby's
 programming logic and an optional Chirp interface. These are planned milestones;
 the implemented behavior is described below.
 

@@ -77,7 +77,11 @@ TellyQ can launch a subscription title.
 | --- | --- | --- | --- |
 | YouTube | PyChromecast YouTubeController with video ID | Start, identity, progress, visible playback and app-exit stop passed on this hardware; natural completion is untested | Continue here for queue/lifecycle engineering |
 | Netflix | Official mobile casting is restricted by device and plan; native Google TV remote can launch deep links | On the Projector Google TV, software opened Netflix; after refreshed sign-in and profile selection, the exact-title link landed on Netflix home instead of the requested movie. Passive Cast status supplied no title or playback state | [Bounded probe](M4-NETFLIX-PROBE.md) classifies this route as assisted app launch; compare other services |
-| Disney+ | Official Android/iOS app supports Chromecast casting | Consumer casting documented; independent software launch and telemetry unknown | Compare with Prime Video using the same capability checklist |
+| Plex | A configured Plex Media Server supports exact library searches, receiver commands, current-item metadata, progress and controls; Home Assistant documents direct Plex-to-Cast playback | The user installed and signed in to the Google TV client; a fresh deep-link launch verified `com.plexapp.android`. No server was discoverable on the LAN | [Boundary record](M4-PLEX-PROBE.md) keeps Plex as an optional personal-library route; it does not meet the current commercial-catalog goal |
+| HBO Max | Official help supports Chromecast from a signed-in Chrome browser on a computer as well as mobile senders | Consumer browser casting is documented; independent exact-title launch and receiver telemetry are unknown | First bounded commercial-catalog candidate if the user has access, because the official sender can run on TellyQ's Mac |
+| Disney+ | Official help supports Chromecast from a supported web or mobile device | Consumer browser casting is documented; independent exact-title launch and telemetry are unknown | Second bounded browser-to-Cast candidate |
+| Hulu | Official help supports Chromecast and other consumer casting from a phone | No documented consumer automation API or independent launch/telemetry evidence | Lower priority than a service with an official Mac browser sender; Hulu is also being integrated further into Disney+ |
+| Paramount+ | Consumer apps support connected-TV viewing and casting | No documented consumer automation API or independent launch/telemetry evidence | Keep as a fallback probe, not an assumed open route |
 | Prime Video | Official iOS/Android app supports Chromecast; Google TV devices can also run the app | Consumer casting documented; independent software launch and telemetry unknown | Compare with Disney+; no evidence yet that it is easier |
 | Apple TV app | Apple's Android app documents Cast playback | A consumer Cast route exists; independent Mac/Python title launch and telemetry unknown | Keep in comparison; do not assume the Apple TV app requires an Apple TV hardware box |
 
@@ -85,8 +89,13 @@ Service sources, checked during planning:
 
 - [Netflix supported casting devices and plans](https://help.netflix.com/en/node/100131): lists older Chromecast models without a remote (third generation or earlier), Nest Hub and selected TV models; Standard/Premium plans are required. Confirm the actual receiver and account tier before testing. This describes the Netflix mobile app, not an open Python control API.
 - [Disney+ casting instructions](https://help.disneyplus.com/en-GB/article/disneyplus-en-uk-cast-airplay-tv): the official help article describes selecting content and a Chromecast in the Disney+ mobile app. The search index exposed the article text; direct page extraction was empty during this review. Recheck device/region-specific details before implementation.
+- [HBO Max Chromecast instructions](https://help.max.com/us/Answer/Detail/000002513): documents casting from a signed-in Chrome browser on a computer, in addition to mobile apps. This is a consumer sender route, not an external playback API.
+- [Hulu navigation and casting](https://help.hulu.com/article/hulu-navigating-hulu): documents consumer casting from a phone. [Hulu's 2026 service note](https://help.hulu.com/article/hulu-is-hulu-going-away) says eligible Hulu content is being integrated further into Disney+.
 - [Amazon's Chromecast instructions](https://digprjsurvey.amazon.co.uk/csad/help/node/G7U9H58SPSH7ZV4V): describes casting from current iOS/Android Prime Video apps and using the native app on Chromecast with Google TV. The main Prime Video help endpoint was inaccessible to the research tool; this is Amazon's own help copy.
 - [Apple TV playback on Android](https://support.apple.com/en-euro/guide/tvapp-android/dev1a32599b3/web): documents selecting a Cast destination and stopping casting. Support in the app does not prove external automation access.
+- [Plex Media Server integration](https://www.home-assistant.io/integrations/plex): documents exact movie and episode lookup, client playback, current-item metadata, progress and controls for supported clients.
+- [Plex through Google Cast](https://www.home-assistant.io/integrations/cast#plex): documents direct playback from a configured Plex server to a Cast target.
+- [Plex Companion support](https://support.plex.tv/articles/203082707-supported-plex-companion-apps/): classifies Android TV and Chromecast as receivers. A server, account and accessible library remain separate requirements.
 
 ### Device and transport routes
 
@@ -126,9 +135,10 @@ to meet the requested autonomy. Verified launch/stop without completion can supp
 assisted viewing; it does not qualify for unattended advancement. If all candidate
 routes fail a hard requirement, stop the probe and make the constraint explicit.
 
-**Recommendation, not a proven ease ranking:** YouTube first; a short Netflix probe
-next because of the already working Assistant setup; that probe now confirms
-software app launch but no playback evidence. Compare Disney+
-and Prime Video using observed capability coverage and setup cost. An early
-device limitation may matter more than the service brand. See M4/M5 in
-[ROADMAP.md](ROADMAP.md).
+**Current decision:** YouTube remains the proven provider. The Netflix probe
+confirmed assisted app launch without exact-title playback evidence. The
+[Plex checkpoint](M4-PLEX-PROBE.md) files Plex as an optional personal-library
+route outside the current commercial-catalog goal. HBO Max is the first bounded
+browser-to-Cast candidate, followed by Disney+, because their official consumer
+senders can run in a browser on TellyQ's Mac. This is an experiment order, not
+evidence of an open API. See M4/M5 in [ROADMAP.md](ROADMAP.md).
