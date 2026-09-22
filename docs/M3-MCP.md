@@ -95,6 +95,15 @@ legacy CLI-only safeguard; MCP keeps its startup-fixed owner runtime and does
 not accept a device or runtime argument. The generic object output schema remains
 the honest Milo 0.4.3 boundary described above.
 
+The standard `tellyq` CLI now accepts `--owner` on `start`, `status`, and `stop`.
+For example, `tellyq --runtime /absolute/owner/runtime status --owner` requires
+the foreground owner and prints the same `MCPResult` envelope as direct Python
+dispatch and MCP, including command-ID validation and unavailable-owner errors.
+If the owner is absent, it returns `owner_unavailable` without trying direct
+playback. This explicit mode is useful for clients that require one contract and
+must never fall back to the legacy controller. The ordinary commands retain
+their existing automatic owner selection and historical success JSON.
+
 Remaining M3 gates: the legacy direct-playback CLI commands still use their
 historical controller path when no foreground owner is selected, and
 pause/resume, probe, queue, discover, ticket, shutdown and serve are outside

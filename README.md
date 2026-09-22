@@ -134,6 +134,9 @@ MCP exposes only `start`, `status`, and `stop`. An accepted `start` ticket is
 not verified playback; use `status` for timestamped evidence. Stopping the MCP
 process does not stop the separate foreground owner. See [the M3 MCP
 foundation](docs/M3-MCP.md) for the remaining parity and live checklist.
+For a regular CLI call that requires this same owner contract, pass `--owner`
+after `start`, `status`, or `stop`. It returns the shared structured result and
+fails safely if the owner is unavailable; it never starts direct playback.
 
 `queue` only writes the local one-item queue. `start` plays it and observes for
 30 seconds, then exits while playback continues. `status` obtains fresh events

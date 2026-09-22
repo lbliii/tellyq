@@ -37,6 +37,12 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("probe", "start", "status", "stop", "pause", "resume"):
         spec = next((spec for spec in OWNER_TOOL_SPECS if spec.name == name), None)
         sub = commands.add_parser(name, help=spec.description if spec is not None else None)
+        if spec is not None:
+            sub.add_argument(
+                "--owner",
+                action="store_true",
+                help="require the foreground owner and emit the shared CLI/MCP result",
+            )
         if name != "start":
             sub.add_argument("--device", required=name == "probe", help="exact UUID from discover")
         if name in {"probe", "start"}:
@@ -73,7 +79,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             return run_foreground(runtime, spec, _emit_service)
         if args.command in OWNER_COMMANDS and (
-            has_endpoint(runtime) or args.command in {"ticket", "shutdown"}
+            has_endpoint(runtime)
+            or getattr(args, "owner", False)
+            or args.command in {"ticket", "shutdown"}
         ):
             if getattr(args, "seconds", None) is not None:
                 raise ValueError(
@@ -86,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                     device=getattr(args, "device", None),
                     command_id=getattr(args, "command_id", None),
                 )
-                response = result.get("response", result)
+                response = result if args.owner else result.get("response", result)
             else:
                 response = owner_command(
                     args.command,
