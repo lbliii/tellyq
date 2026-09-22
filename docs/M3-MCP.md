@@ -85,6 +85,16 @@ the installed wheel. Milo's verifier requires a module-level `CLI` instance;
 the packaged entry point builds its instance after startup runtime selection.
 The shim supplies that instance without changing production startup behavior.
 
+The next offline batch shares `OwnerToolSpec` metadata for the three commands.
+It selects CLI help and `--command-id` availability, Milo registration names,
+descriptions, and MCP hints from the same definitions. Milo continues to infer
+the input schema from the registered Python handler signature; the spec selects
+the handler shape so `status` has no command ID and `start`/`stop` do. Tests
+compare both surfaces to the shared metadata. The `device` override remains a
+legacy CLI-only safeguard; MCP keeps its startup-fixed owner runtime and does
+not accept a device or runtime argument. The generic object output schema remains
+the honest Milo 0.4.3 boundary described above.
+
 Remaining M3 gates: the legacy direct-playback CLI commands still use their
 historical controller path when no foreground owner is selected, and
 pause/resume, probe, queue, discover, ticket, shutdown and serve are outside

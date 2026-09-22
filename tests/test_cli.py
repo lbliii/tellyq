@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from tellyq import __main__ as cli
+from tellyq.service_cli import OWNER_TOOL_SPECS
 from tellyq.state import read
 
 
@@ -15,6 +16,23 @@ def test_help_has_no_runtime_side_effects(tmp_path, monkeypatch, capsys):
         cli.main(["--help"])
     assert result.value.code == 0
     assert "start" in capsys.readouterr().out
+    assert not runtime.exists()
+
+
+def test_owner_tool_help_uses_shared_command_specs(tmp_path, monkeypatch, capsys):
+    runtime = tmp_path / "runtime"
+    monkeypatch.setattr(cli, "RUNTIME", runtime)
+    with pytest.raises(SystemExit) as result:
+        cli.main(["--help"])
+    assert result.value.code == 0
+    root_help = capsys.readouterr().out
+    for spec in OWNER_TOOL_SPECS:
+        assert spec.description in " ".join(root_help.split())
+        with pytest.raises(SystemExit) as command_help:
+            cli.main([spec.name, "--help"])
+        assert command_help.value.code == 0
+        text = capsys.readouterr().out
+        assert ("--command-id" in text) == spec.accepts_command_id
     assert not runtime.exists()
 
 

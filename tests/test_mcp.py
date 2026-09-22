@@ -441,3 +441,8 @@ def test_mcp_exposes_exact_tool_schemas(tmp_path: Path) -> None:
     }
     assert tools["status"]["inputSchema"] == {"type": "object", "properties": {}}
     assert all(tool["outputSchema"] == {"type": "object"} for tool in tools.values())
+    for spec in service_cli.OWNER_TOOL_SPECS:
+        tool = tools[spec.name]
+        assert tool["description"] == spec.description
+        assert tool["annotations"] == spec.annotations()
+        assert ("command_id" in tool["inputSchema"]["properties"]) == spec.accepts_command_id
