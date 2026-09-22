@@ -18,9 +18,9 @@ stable fields while leaving the nested owner response opaque. See the
 [M3 acceptance record](docs/M3-ACCEPTANCE.md).
 M4's Netflix probe classified that route as assisted app launch. Plex is now the
 selected second-provider candidate because its server exposes library identity and
-playback sessions. The [first Plex checkpoint](docs/M4-PLEX-PROBE.md) found no
-local server or launchable native TV client and stopped at the trusted-install,
-account, and test-library setup gate before adapter work.
+playback sessions. The [Plex checkpoint](docs/M4-PLEX-PROBE.md) verifies the
+signed-in Google TV client, but found no local server and remains at the
+trusted-install and test-library setup gate before adapter work.
 
 ## First playback proof (M0)
 

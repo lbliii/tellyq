@@ -22,15 +22,18 @@ this checkpoint until it exposes the same exact-item and playback evidence.
 
 ## Environment probe
 
-On 2026-09-22, an eight-second local `_plexmediasvr._tcp` discovery found no Plex
-Media Server. The private discovery result remains under ignored
+On 2026-09-22, two local `_plexmediasvr._tcp` discovery attempts found no Plex
+Media Server. The second scan followed the user's Plex account creation and TV
+client setup. The private discovery result remains under ignored
 `runtime/plex-probe/`; no addresses or account data are committed.
 
-The paired Android TV Remote endpoint rejected both `plex://` and the
-`com.plexapp.android` package launch route. The active-app report stayed on the
-Google TV ambient application. This did not prove that a native Plex client can
-be controlled on this device. A native Android TV client is optional for the
-first experiment because the existing Google TV is also a proven Cast target.
+Before installation, the paired Android TV Remote endpoint rejected both
+`plex://` and the `com.plexapp.android` package launch route. The user then
+installed the Plex client and signed in on the Chromecast. A fresh `plex://`
+command reported `com.plexapp.android` before and after launch, verifying that the
+signed-in native client is present and active. This proves app availability, not
+exact-title playback or telemetry. The existing Google TV also remains a proven
+Cast target.
 
 The official Plex download manifest supplied Plex Media Server
 `1.43.4.10903-e5521bd8c` for macOS. Its archive matched the manifest's checksum,
@@ -75,6 +78,6 @@ target and the Plex server directly:
 Only after steps 1-5 pass should an adapter be added to TellyQ. Natural completion
 is required before Plex can participate in unattended queue advancement.
 
-**Current classification:** promising and setup-blocked. Plex is the selected M4
-candidate, but no exact-title launch or playback telemetry has yet been observed
-on this equipment.
+**Current classification:** promising and server-setup-blocked. The signed-in TV
+client is verified and Plex is the selected M4 candidate, but no server, library,
+exact-title launch, or playback telemetry has yet been observed on this equipment.
