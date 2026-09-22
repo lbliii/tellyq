@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from .models import MCPAdvertisedResult
 from .service_cli import OWNER_TOOL_SPECS, OwnerToolSpec, owner_tool_command
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ def build_cli(runtime: Path) -> CLI:
     )
 
     # Milo 0.4.3 misrepresents recursive aliases and nullable values in output
-    # schemas. Advertise an object here; owner_tool_command retains typed MCPResult.
+    # schemas. Advertise the stable envelope and keep owner response opaque.
     for spec in OWNER_TOOL_SPECS:
         handler = _handler(spec, runtime)
         cli.command(
@@ -62,22 +63,25 @@ def build_cli(runtime: Path) -> CLI:
     return cli
 
 
-def _handler(spec: OwnerToolSpec, runtime: Path) -> Callable[..., dict]:
+def _handler(spec: OwnerToolSpec, runtime: Path) -> Callable[..., MCPAdvertisedResult]:
     if spec.accepts_command_id:
 
-        def with_id(command_id: str | None = None) -> dict:
+        def with_id(command_id: str | None = None) -> MCPAdvertisedResult:
             """Submit a guarded owner command.
 
             Args:
                 command_id: Optional stable ID used to retry or query this request.
             """
-            return cast(dict, owner_tool_command(spec.name, runtime, command_id=command_id))
+            return cast(
+                MCPAdvertisedResult,
+                owner_tool_command(spec.name, runtime, command_id=command_id),
+            )
 
         return with_id
 
-    def without_id() -> dict:
+    def without_id() -> MCPAdvertisedResult:
         """Read current owner state without changing playback."""
-        return cast(dict, owner_tool_command(spec.name, runtime))
+        return cast(MCPAdvertisedResult, owner_tool_command(spec.name, runtime))
 
     return without_id
 

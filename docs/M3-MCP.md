@@ -56,10 +56,12 @@ is playing. `status` returns the owner's timestamped snapshot and evidence;
 inspect its state and evidence fields before claiming playback. `stop` submits
 the owner's existing guarded stop and retains its uncertain-outcome behavior.
 
-The advertised MCP output schema is intentionally a generic JSON object at the
-Milo boundary. Milo 0.4.3 cannot faithfully render TellyQ's recursive IPC
-aliases and nullable nested evidence into JSON Schema; the actual structured
-payload remains the versioned typed contract in `tellyq/models.py`.
+The advertised MCP output schema describes the stable result envelope:
+`schema_version`, `ok`, `code`, optional `response`, and optional `error`
+with its `type` and `message`. The owner `response` is advertised as an opaque
+object. Milo 0.4.3 cannot faithfully render TellyQ's recursive IPC aliases
+and nullable nested evidence into JSON Schema. The actual structured payload
+retains the full versioned `MCPResult` contract in `tellyq/models.py`.
 
 ## Bounded command-parity batch
 
@@ -92,8 +94,8 @@ the input schema from the registered Python handler signature; the spec selects
 the handler shape so `status` has no command ID and `start`/`stop` do. Tests
 compare both surfaces to the shared metadata. The temporary CLI-only `device`
 override for these three tools has been removed. MCP keeps its startup-fixed
-owner runtime and does not accept a device or runtime argument. The generic
-object output schema remains the honest Milo 0.4.3 boundary described above.
+owner runtime and does not accept a device or runtime argument. The shallow
+output schema remains the honest Milo 0.4.3 boundary described above.
 
 The standard `tellyq` CLI now always routes `start`, `status`, and `stop` to the
 foreground owner and prints the same `MCPResult` envelope as direct Python
@@ -112,12 +114,12 @@ the terminal renderer only changes the shell presentation. Offline subprocess
 tests compare successful commands, invalid IDs and an unavailable owner with
 direct Python results while allowing only local Unix sockets.
 
-Remaining M3 gate: review the advertised Milo input/output schema against the
-versioned result contract and finish parity tests for the intended three-tool
-owner surface. `pause`/`resume`, `ticket`, `shutdown` and `serve` are owner
+The advertised Milo input/output schemas have been reviewed against the
+versioned result contract. Offline tests assert the exact three-tool list,
+input parameters, stable output envelope, and success/error results through
+real stdio. `pause`/`resume`, `ticket`, `shutdown` and `serve` are owner
 administration; `probe`, `queue` and `discover` are diagnostics/setup, not MCP
-playback tools. Do not claim the complete M3 command-definition acceptance gate
-from this slice. A supervised hardware start/status/stop run through an actual
+playback tools. A supervised hardware start/status/stop run through an actual
 MCP client has now passed its machine-side checks, and the
 user separately confirmed visible playback and the home screen after stop. See
 the [second MCP checkpoint](M3-MCP-SECOND-CHECKPOINT.md) for the evidence and

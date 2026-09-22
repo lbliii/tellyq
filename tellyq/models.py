@@ -458,6 +458,20 @@ class MCPResult(TypedDict):
     error: NotRequired[MCPError]
 
 
+class MCPAdvertisedResult(TypedDict):
+    """Milo output schema with the accurate envelope and opaque owner response.
+
+    The response body has the stronger MCPResult type in Python. Milo 0.4.3
+    cannot describe its nullable and recursive fields faithfully in JSON Schema.
+    """
+
+    schema_version: Literal[1]
+    ok: bool
+    code: str
+    response: NotRequired[dict]
+    error: NotRequired[MCPError]
+
+
 class MCPCheckpointSummary(TypedDict):
     """Private checkpoint result; machine evidence excludes visual confirmation."""
 

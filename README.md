@@ -10,10 +10,12 @@ start/status/pause/resume/stop, durable history and bounded reconnect recovery.
 Three of four recent three-item attempts completed. The intermittent enqueue
 stall remains open as [issue #42](https://github.com/lbliii/tellyq/issues/42).
 See the [M2 closeout](docs/M2-ACCEPTANCE.md) for the complete evidence and limits.
-M3's Milo/MCP foundation is implemented as a local stdio surface with
-`start`, `status`, and `stop`. Its supervised hardware checkpoint passed with
-receiver evidence and separate user visual confirmation; broader CLI/Python/MCP
-parity remains open. See the [M3 MCP checkpoint](docs/M3-MCP-SECOND-CHECKPOINT.md).
+M3's Milo/MCP surface exposes `start`, `status`, and `stop` for the existing
+foreground owner. Its supervised hardware checkpoint passed with receiver
+evidence and separate user visual confirmation. CLI, Python, Milo shell, and
+MCP now share the result envelope; the advertised MCP schema describes its
+stable fields while leaving the nested owner response opaque. See the
+[M3 acceptance record](docs/M3-ACCEPTANCE.md).
 
 ## First playback proof (M0)
 
@@ -133,7 +135,7 @@ TELLYQ_OWNER_RUNTIME="/absolute/path/to/tellyq/runtime/owner" \
 MCP exposes only `start`, `status`, and `stop`. An accepted `start` ticket is
 not verified playback; use `status` for timestamped evidence. Stopping the MCP
 process does not stop the separate foreground owner. See [the M3 MCP
-foundation](docs/M3-MCP.md) for the remaining parity and live checklist.
+foundation](docs/M3-MCP.md) for its command contract and checkpoint workflow.
 Normal `start`, `status`, and `stop` CLI calls require the foreground owner and
 return the shared structured result. An unavailable owner is an error; no
 second playback controller is started.
