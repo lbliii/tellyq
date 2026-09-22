@@ -71,6 +71,13 @@ class EvidenceOwner(FakeOwner):
         return response
 
 
+class RejectedOwner(FakeOwner):
+    def _response(self, request):
+        if request["operation"] == "submit" and request["command"]["action"] == "start":
+            return {"schema_version": 1, "ok": False, "code": "command_rejected"}
+        return super()._response(request)
+
+
 def test_trace_uses_real_stdio_without_owner_effects(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket, "socket", _unix_socket)
     with tempfile.TemporaryDirectory(prefix="tq-mcp-checkpoint-", dir="/tmp") as directory:
@@ -180,6 +187,33 @@ def test_manifest_mismatch_refuses_start(monkeypatch: pytest.MonkeyPatch) -> Non
                     cleanup_seconds=1,
                 )
             assert [request["operation"] for request in owner.requests] == ["status"]
+        finally:
+            owner.close()
+
+
+def test_definite_start_rejection_does_not_stop_preexisting_playback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(socket, "socket", _unix_socket)
+    with tempfile.TemporaryDirectory(prefix="tq-mcp-checkpoint-", dir="/tmp") as directory:
+        owner = RejectedOwner(Path(directory) / "owner")
+        try:
+            summary = checkpoint_mcp.run_checkpoint(
+                "start",
+                owner.runtime,
+                SPEC,
+                Journal(),
+                code_revision="abcdef1",
+                seconds=1,
+                poll_seconds=0.1,
+                cleanup_seconds=1,
+            )
+            assert summary["start_acknowledged"] is False
+            assert "stop_command_id" not in summary
+            submitted = [
+                request["command"] for request in owner.requests if request["operation"] == "submit"
+            ]
+            assert [command["action"] for command in submitted] == ["start"]
         finally:
             owner.close()
 

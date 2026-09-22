@@ -115,10 +115,11 @@ records protocol responses in a new exclusive directory under ignored
 owner's complete queue and target match the selected private manifest. It
 records a start intent and receipt, closes the MCP process, reopens it to read
 fresh receiver evidence, then sends a guarded stop and waits for observed stop.
-An acknowledgement alone never sets either observation flag. If observation
-fails or the operator interrupts after start, the runner still attempts the
-guarded stop; consult the private journal when any command outcome is uncertain.
-Closing MCP does not shut down the owner.
+An acknowledgement alone never sets either observation flag. After an accepted
+or uncertain start, the runner attempts guarded stop even if observation fails
+or the operator interrupts. A definite start rejection causes no stop, so the
+checkpoint cannot cancel preexisting playback. Consult the private journal
+when any command outcome is uncertain. Closing MCP does not shut down the owner.
 
 For the later explicitly requested live session, copy
 `examples/mcp-checkpoint.json` into `runtime/`, fill in a fresh queue ID and

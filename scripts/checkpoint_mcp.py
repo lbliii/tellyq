@@ -197,10 +197,17 @@ def run_checkpoint(
         start_id = str(uuid4())
         summary["start_command_id"] = start_id
         journal.write("mcp_command_intent", action="start", command_id=start_id, outcome="unknown")
+        stop_required = True
         try:
             start = first.call("start", command_id=start_id)
             journal.write("mcp_command_result", action="start", result=start)
             summary["start_acknowledged"] = start["ok"] and start["code"] == "accepted"
+            stop_required = start["ok"] or start["code"] in {
+                "accepted",
+                "owner_unavailable",
+                "owner_request_failed",
+                "internal_error",
+            }
             start_ticket = (
                 _object(start.get("response")).get("ticket_id") if "response" in start else None
             )
@@ -213,6 +220,8 @@ def run_checkpoint(
             )
             summary["interrupted"] = isinstance(exc, KeyboardInterrupt)
             start_ticket = None
+    if not stop_required:
+        return summary
     # The original MCP process is closed before reopening. The foreground owner
     # must retain the attempt independently of the stdio client's lifetime.
     before_stop: object = None
