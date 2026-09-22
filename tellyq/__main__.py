@@ -12,7 +12,6 @@ from .service_cli import (
     OWNER_COMMANDS,
     OWNER_TOOL_COMMANDS,
     OWNER_TOOL_SPECS,
-    has_endpoint,
     owner_command,
     owner_tool_command,
 )
@@ -37,15 +36,9 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("probe", "start", "status", "stop", "pause", "resume"):
         spec = next((spec for spec in OWNER_TOOL_SPECS if spec.name == name), None)
         sub = commands.add_parser(name, help=spec.description if spec is not None else None)
-        if spec is not None:
-            sub.add_argument(
-                "--owner",
-                action="store_true",
-                help="require the foreground owner and emit the shared CLI/MCP result",
-            )
-        if name != "start":
+        if name in {"probe", "pause", "resume"}:
             sub.add_argument("--device", required=name == "probe", help="exact UUID from discover")
-        if name in {"probe", "start"}:
+        if name == "probe":
             sub.add_argument(
                 "--seconds", type=int, default=None, choices=range(5, 121), metavar="5..120"
             )
@@ -78,23 +71,13 @@ def main(argv: list[str] | None = None) -> int:
                 else load_manifest(args.manifest)
             )
             return run_foreground(runtime, spec, _emit_service)
-        if args.command in OWNER_COMMANDS and (
-            has_endpoint(runtime)
-            or getattr(args, "owner", False)
-            or args.command in {"ticket", "shutdown"}
-        ):
-            if getattr(args, "seconds", None) is not None:
-                raise ValueError(
-                    "--seconds configures a direct start; foreground commands use ticket/status queries."
-                )
+        if args.command in OWNER_COMMANDS:
             if args.command in OWNER_TOOL_COMMANDS:
-                result = owner_tool_command(
+                response = owner_tool_command(
                     args.command,
                     runtime,
-                    device=getattr(args, "device", None),
                     command_id=getattr(args, "command_id", None),
                 )
-                response = result if args.owner else result.get("response", result)
             else:
                 response = owner_command(
                     args.command,
@@ -105,10 +88,6 @@ def main(argv: list[str] | None = None) -> int:
                 )
             print(json.dumps(response, indent=2), flush=True)
             return 0 if response["ok"] else 1
-        if getattr(args, "command_id", None) is not None:
-            raise ValueError(
-                "--command-id requires a foreground owner; no direct command was sent."
-            )
         runtime.mkdir(exist_ok=True, parents=True)
         logging.basicConfig(filename=runtime / "controller.log", level=logging.WARNING)
         report, code = execute(

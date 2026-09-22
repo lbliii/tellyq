@@ -111,7 +111,9 @@ def command(runtime, action, command_id=None):
     output = io.StringIO()
     with redirect_stdout(output):
         assert cli.main(argv) == 0
-    return json.loads(output.getvalue())
+    result = json.loads(output.getvalue())
+    assert result["ok"] is True
+    return result["response"]
 
 
 def crash_process(runtime, boundary):

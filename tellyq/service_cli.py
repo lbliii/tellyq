@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 from .domain.values import CommandAction, ContentKind, ContentRef, PlaybackRequest, PlaybackTarget
 from .models import IPCResponse, MCPResult
 from .runner import RunnerCommand
-from .runner_ipc import IPCUnavailable, RunnerIPCClient, endpoint_path
+from .runner_ipc import IPCUnavailable, RunnerIPCClient
 
 OWNER_COMMANDS = frozenset({"start", "status", "stop", "pause", "resume", "ticket", "shutdown"})
 
@@ -66,9 +66,7 @@ _COMMAND_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _COMMAND_ID_MESSAGE = "command_id must be 1-128 characters: letters, digits, . _ : or -."
 
 
-def owner_tool_command(
-    command: str, runtime: Path, *, command_id: str | None = None, device: str | None = None
-) -> MCPResult:
+def owner_tool_command(command: str, runtime: Path, *, command_id: str | None = None) -> MCPResult:
     """Dispatch the common CLI/Python/MCP owner tools with safe structured errors.
 
     A returned ticket acknowledges the request; it never proves receiver playback.
@@ -84,7 +82,7 @@ def owner_tool_command(
     ):
         return _tool_error("invalid_command_id", _COMMAND_ID_MESSAGE)
     try:
-        response = owner_command(command, runtime, command_id=command_id, device=device)
+        response = owner_command(command, runtime, command_id=command_id)
     except IPCUnavailable:
         return _tool_error(
             "owner_unavailable",
@@ -110,11 +108,6 @@ def _tool_error(code: str, message: str) -> MCPResult:
         "code": code,
         "error": {"type": code, "message": message},
     }
-
-
-def has_endpoint(runtime: Path) -> bool:
-    path = endpoint_path(runtime)
-    return path.exists() or path.is_symlink()
 
 
 def _object(value: object) -> dict[str, object]:

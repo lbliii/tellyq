@@ -401,11 +401,11 @@ def test_cli_accepts_control_vocabulary(tmp_path, monkeypatch, capsys, command):
 
     from tellyq import __main__ as cli
 
-    dispatch = Mock(return_value=({"command": command}, 0))
-    monkeypatch.setattr(cli, "execute", dispatch)
+    dispatch = Mock(return_value={"schema_version": 1, "ok": True, "code": "accepted"})
+    monkeypatch.setattr(cli, "owner_command", dispatch)
     monkeypatch.setattr(cli, "RUNTIME", tmp_path)
     assert cli.main([command]) == 0
-    assert json.loads(capsys.readouterr().out)["command"] == command
+    assert json.loads(capsys.readouterr().out)["code"] == "accepted"
     assert dispatch.call_args.args[0] == command
 
 

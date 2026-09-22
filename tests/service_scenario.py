@@ -179,7 +179,7 @@ def run():
                     assert cli.main(["--runtime", str(runtime), "start"]) == 0
                 accepted = json.loads(output.getvalue())
                 assert accepted["code"] == "accepted"
-                command_id = accepted["ticket_id"]
+                command_id = accepted["response"]["ticket_id"]
                 wait_until(lambda: backend.effects.count("stop") == 3)
 
                 def released():

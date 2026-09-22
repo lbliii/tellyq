@@ -105,29 +105,28 @@ be turned on and switched to the Chromecast input manually if HDMI-CEC is disabl
 ```sh
 uv sync --locked
 uv run --locked tellyq discover
-uv run --locked tellyq queue --device UUID_FROM_DISCOVER
-uv run --locked tellyq start
-uv run --locked tellyq status
-uv run --locked tellyq stop
+mkdir -p runtime/owner
+cp examples/mcp-checkpoint.json runtime/my-session.json
+# Edit runtime/my-session.json with a fresh queue_id and exact discovered device UUID.
+uv run --locked tellyq --runtime "$PWD/runtime/owner" serve \
+  --manifest "$PWD/runtime/my-session.json"
 ```
 
-The optional M3 stdio MCP surface uses the same already-running foreground
-owner. Run the owner in one terminal and launch Milo in a second terminal with
-the owner's absolute private runtime; the MCP caller cannot supply a runtime
-path or create a second playback owner:
+With the owner running, use another terminal in the same checkout:
 
 ```sh
-# Terminal 1, from the TellyQ checkout.
-mkdir -p runtime/mcp-owner
-cp examples/native-session.json runtime/mcp-session.json
-# Edit runtime/mcp-session.json with a fresh queue_id and discovered device UUID.
-uv run --locked tellyq --runtime "$PWD/runtime/mcp-owner" serve \
-  --manifest "$PWD/runtime/mcp-session.json"
+uv run --locked tellyq --runtime "$PWD/runtime/owner" start
+uv run --locked tellyq --runtime "$PWD/runtime/owner" status
+uv run --locked tellyq --runtime "$PWD/runtime/owner" stop
+uv run --locked tellyq --runtime "$PWD/runtime/owner" shutdown --timeout 5
 ```
 
+To use the optional M3 stdio MCP surface instead of the CLI controls above, keep
+the owner running and launch Milo with its absolute private runtime. An MCP
+caller cannot select a different runtime or create another playback owner:
+
 ```sh
-# Terminal 2, from any working directory; use the absolute checkout path.
-TELLYQ_OWNER_RUNTIME="/absolute/path/to/tellyq/runtime/mcp-owner" \
+TELLYQ_OWNER_RUNTIME="/absolute/path/to/tellyq/runtime/owner" \
   uv --directory "/absolute/path/to/tellyq" run --locked --extra mcp tellyq-mcp --mcp
 ```
 
@@ -135,29 +134,32 @@ MCP exposes only `start`, `status`, and `stop`. An accepted `start` ticket is
 not verified playback; use `status` for timestamped evidence. Stopping the MCP
 process does not stop the separate foreground owner. See [the M3 MCP
 foundation](docs/M3-MCP.md) for the remaining parity and live checklist.
-For a regular CLI call that requires this same owner contract, pass `--owner`
-after `start`, `status`, or `stop`. It returns the shared structured result and
-fails safely if the owner is unavailable; it never starts direct playback.
+Normal `start`, `status`, and `stop` CLI calls require the foreground owner and
+return the shared structured result. An unavailable owner is an error; no
+second playback controller is started.
 The `tellyq-mcp` entry point accepts those commands in a shell as well, returning
 the same JSON result and a nonzero exit status on failure.
 
-`queue` only writes the local one-item queue. `start` plays it and observes for
-30 seconds, then exits while playback continues. `status` obtains fresh events
-without starting or resuming anything. `stop` exits the saved YouTube receiver
-session and attempts to verify that the app has exited. It does not pause the video;
-a return to the Chromecast home screen is an expected visible result. It refuses
-to stop a replacement session or known different content. An explicit `queue` permits a new attempt;
-accidental repeated `start` calls do not restart an active/uncertain attempt.
+`queue` only writes a one-item local queue without playback; a normal owner
+session uses a manifest. `start` submits the first manifest item and returns a
+ticket while the owner continues monitoring.
+`status` reads the owner's timestamped evidence without relaunching playback.
+`stop` requests guarded receiver stop and may return the TV to the Chromecast
+home screen. Accepted commands do not prove their receiver effects; inspect
+status or the ticket before retrying an uncertain outcome.
 
-All commands emit JSON. `commands[].returned` records the command result;
+All commands emit JSON. Owner controls use the shared result envelope with a
+ticket or timestamped snapshot in `response`. Direct diagnostic reports use
+`commands[].returned` for the command result.
 `evidence.receiver_playback_confirmed` requires the requested content ID, PLAYING
 state, two advancing positions from the same media session, and qualified inactive
 ad evidence. The YouTube adapter can supply that evidence from reviewed provider
 states with fresh receiver identity and consistent Cast telemetry; missing break
 metadata alone remains unknown. This does **not** prove the TV is displaying the
 video. Observations retain unknown fields as null.
-Exit code 0 means the operation completed; inspect the evidence/state for its
-outcome. A timeout may leave playback unconfirmed, so inspect status before retrying.
+Exit code 0 means the local command succeeded; inspect the evidence/state for
+the receiver outcome. A timeout may leave playback unconfirmed, so inspect
+status before retrying.
 
 The M1 integration adds `schema_version: 1` to reports and applies the
 stricter domain evidence policy: unknown ad state keeps `state: unconfirmed`, even
@@ -167,10 +169,9 @@ receiver did not supply. Existing queue/session files remain compatible. New
 snapshots preserve ownership/history while discarding old monotonic evidence on
 process restart. The acceptance record above documents the observed hardware outcome.
 
-`probe --device UUID_FROM_DISCOVER` is the direct playback experiment that bypasses
-the persistent queue. Both `probe` and `start` accept `--seconds 5..120` to change
-the observation window. `status` and `stop` accept an explicit `--device`; otherwise
-they use the saved session, then the queue. Only one command may run at a time.
+`probe --device UUID_FROM_DISCOVER` remains an explicit, direct diagnostic that
+bypasses the owner and persistent queue. Only `probe` accepts `--seconds 5..120`
+to change its observation window. Normal playback controls require the owner.
 
 Device identity, session information, queue state, diagnostics and timestamped run
 reports stay under ignored `runtime/` in the working directory. Run commands from

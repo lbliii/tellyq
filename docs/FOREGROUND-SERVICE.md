@@ -18,7 +18,7 @@ new activity. It is not inactive-ad evidence or permission to launch another ite
 An optional `"mode": "native"` manifest selects the experimental
 [native YouTube runner](NATIVE-QUEUE-RUNNER.md). It stages one successor within
 the receiver session and uses different reconnect and cleanup rules. The default
-manifest and release/idle behavior described below remain the legacy mode.
+manifest and release/idle behavior described below remain the default mode.
 
 Copy [the example manifest](../examples/session.json) to an ignored runtime file.
 It uses the short [nature test clips](LIVE-TEST-MEDIA.md) selected for future live
@@ -68,11 +68,11 @@ stop the TV. Send stop first when that is intended. A blocked operation keeps it
 owner locks and IPC endpoint until its worker actually exits. Initialization may
 report `initializing` before the endpoint becomes ready.
 
-When an owner endpoint exists, the legacy control command names use IPC. A stale,
-invalid or unavailable endpoint produces an error; it never falls back to a second
-Cast controller. Without an endpoint the original one-item commands still work.
-`--seconds` remains a direct-command observation option and is rejected in owner
-mode; use status/ticket queries there. `--command-id` requires owner mode.
+`start`, `status`, `stop`, `pause` and `resume` always use the owner IPC. A missing,
+stale or unavailable owner produces an error; no second Cast controller starts.
+`probe` is the explicit direct diagnostic and alone accepts `--seconds`; use
+status/ticket queries for owner observations. The three MCP-exposed commands
+return the same structured JSON result in the regular CLI, Python and MCP.
 
 ## Durable state and recovery
 
