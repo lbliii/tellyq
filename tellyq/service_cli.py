@@ -1,16 +1,65 @@
 """CLI clients of the foreground owner; no device fallback after IPC selection."""
 
+import re
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
 from uuid import UUID, uuid4
 
 from .domain.values import CommandAction, ContentKind, ContentRef, PlaybackRequest, PlaybackTarget
-from .models import IPCResponse
+from .models import IPCResponse, MCPResult
 from .runner import RunnerCommand
 from .runner_ipc import IPCUnavailable, RunnerIPCClient, endpoint_path
 
 OWNER_COMMANDS = frozenset({"start", "status", "stop", "pause", "resume", "ticket", "shutdown"})
+OWNER_TOOL_COMMANDS = frozenset({"start", "status", "stop"})
+_COMMAND_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_COMMAND_ID_MESSAGE = "command_id must be 1-128 characters: letters, digits, . _ : or -."
+
+
+def owner_tool_command(
+    command: str, runtime: Path, *, command_id: str | None = None, device: str | None = None
+) -> MCPResult:
+    """Dispatch the common CLI/Python/MCP owner tools with safe structured errors.
+
+    A returned ticket acknowledges the request; it never proves receiver playback.
+    The owner retains default ID generation and retry semantics.
+    """
+    if command not in OWNER_TOOL_COMMANDS:
+        return _tool_error("invalid_command", "Only start, status and stop are supported.")
+    if command == "status" and command_id is not None:
+        return _tool_error("invalid_command_id", "status does not accept command_id.")
+    if command_id is not None and (
+        not isinstance(command_id, str) or _COMMAND_ID.fullmatch(command_id) is None
+    ):
+        return _tool_error("invalid_command_id", _COMMAND_ID_MESSAGE)
+    try:
+        response = owner_command(command, runtime, command_id=command_id, device=device)
+    except IPCUnavailable:
+        return _tool_error(
+            "owner_unavailable",
+            "The owner request could not be confirmed; its outcome may be unknown. "
+            "Check status before retrying.",
+        )
+    except ValueError:
+        return _tool_error("owner_rejected", "The foreground owner rejected the command.")
+    except Exception:
+        return _tool_error("owner_request_failed", "The foreground owner request failed.")
+    return {
+        "schema_version": 1,
+        "ok": response["ok"],
+        "code": response["code"],
+        "response": response,
+    }
+
+
+def _tool_error(code: str, message: str) -> MCPResult:
+    return {
+        "schema_version": 1,
+        "ok": False,
+        "code": code,
+        "error": {"type": code, "message": message},
+    }
 
 
 def has_endpoint(runtime: Path) -> bool:

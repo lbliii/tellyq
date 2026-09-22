@@ -53,11 +53,16 @@ def test_selected_ipc_failure_never_falls_back(tmp_path, monkeypatch, capsys, co
     (tmp_path / "runner.sock").symlink_to(tmp_path / "missing")
     direct = Mock()
     monkeypatch.setattr(cli, "execute", direct)
+    monkeypatch.setattr(
+        service_cli, "owner_command", Mock(side_effect=IPCUnavailable("private secret"))
+    )
     monkeypatch.setattr(cli, "owner_command", Mock(side_effect=IPCUnavailable("private secret")))
     assert cli.main([command]) == 1
     direct.assert_not_called()
     report = json.loads(capsys.readouterr().out)
-    assert report["error"]["type"] == "IPCUnavailable"
+    assert report["error"]["type"] == (
+        "owner_unavailable" if command in service_cli.OWNER_TOOL_COMMANDS else "IPCUnavailable"
+    )
     assert "private secret" not in str(report)
 
 
@@ -95,6 +100,7 @@ def test_explicit_runtime_and_ipc_options(monkeypatch, tmp_path, capsys):
     runtime.mkdir()
     (runtime / "runner.sock").touch()
     command = Mock(return_value={"schema_version": 1, "ok": True, "code": "accepted"})
+    monkeypatch.setattr(service_cli, "owner_command", command)
     monkeypatch.setattr(cli, "owner_command", command)
     assert cli.main(["--runtime", str(runtime), "pause", "--command-id", "pause-a"]) == 0
     assert command.call_args.args == ("pause", runtime)
@@ -124,3 +130,51 @@ def test_serve_validates_before_composition(monkeypatch, tmp_path, capsys):
     capsys.readouterr()
     with pytest.raises(SystemExit):
         cli.main(["serve", "--import-legacy"])
+
+
+@pytest.mark.parametrize("action", ["start", "status", "stop"])
+def test_owner_tool_python_and_cli_parity(monkeypatch, tmp_path, capsys, action):
+    (tmp_path / "runner.sock").touch()
+    response = {"schema_version": 1, "ok": True, "code": "accepted", "ticket_id": "retry-a"}
+    owner = Mock(return_value=response)
+    monkeypatch.setattr(service_cli, "owner_command", owner)
+    direct = service_cli.owner_tool_command(
+        action, tmp_path, command_id="retry-a" if action != "status" else None
+    )
+    args = ["--runtime", str(tmp_path), action]
+    if action != "status":
+        args.extend(["--command-id", "retry-a"])
+    assert cli.main(args) == 0
+    assert json.loads(capsys.readouterr().out) == direct["response"]
+    assert owner.call_count == 2
+    assert owner.call_args.kwargs["command_id"] == ("retry-a" if action != "status" else None)
+
+
+@pytest.mark.parametrize("action", ["start", "stop"])
+def test_bad_owner_id_is_shared_structured_error(monkeypatch, tmp_path, capsys, action):
+    (tmp_path / "runner.sock").touch()
+    owner = Mock(side_effect=AssertionError("must not dispatch"))
+    monkeypatch.setattr(service_cli, "owner_command", owner)
+    direct = service_cli.owner_tool_command(action, tmp_path, command_id="bad id")
+    assert cli.main(["--runtime", str(tmp_path), action, "--command-id", "bad id"]) == 1
+    assert json.loads(capsys.readouterr().out) == direct
+    assert direct["code"] == "invalid_command_id"
+    owner.assert_not_called()
+
+
+def test_owner_tool_retries_and_uncertain_failure(monkeypatch, tmp_path):
+    accepted = {"schema_version": 1, "ok": True, "code": "accepted", "ticket_id": "same"}
+    owner = Mock(return_value=accepted)
+    monkeypatch.setattr(service_cli, "owner_command", owner)
+    assert (
+        service_cli.owner_tool_command("start", tmp_path, command_id="same")["response"] == accepted
+    )
+    assert (
+        service_cli.owner_tool_command("start", tmp_path, command_id="same")["response"] == accepted
+    )
+    assert owner.call_count == 2
+    owner.side_effect = IPCUnavailable("private socket address")
+    result = service_cli.owner_tool_command("stop", tmp_path, command_id="same-stop")
+    assert result["code"] == "owner_unavailable"
+    assert "unknown" in result["error"]["message"]
+    assert "private socket address" not in str(result)

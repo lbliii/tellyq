@@ -8,7 +8,13 @@ from pathlib import Path
 from .controller import execute
 from .models import ServiceReport
 from .service import legacy_spec, load_manifest, run_foreground
-from .service_cli import OWNER_COMMANDS, has_endpoint, owner_command
+from .service_cli import (
+    OWNER_COMMANDS,
+    OWNER_TOOL_COMMANDS,
+    has_endpoint,
+    owner_command,
+    owner_tool_command,
+)
 from .state import RUNTIME
 
 
@@ -71,13 +77,22 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(
                     "--seconds configures a direct start; foreground commands use ticket/status queries."
                 )
-            response = owner_command(
-                args.command,
-                runtime,
-                device=getattr(args, "device", None),
-                command_id=getattr(args, "command_id", None),
-                timeout=getattr(args, "timeout", 0),
-            )
+            if args.command in OWNER_TOOL_COMMANDS:
+                result = owner_tool_command(
+                    args.command,
+                    runtime,
+                    device=getattr(args, "device", None),
+                    command_id=getattr(args, "command_id", None),
+                )
+                response = result.get("response", result)
+            else:
+                response = owner_command(
+                    args.command,
+                    runtime,
+                    device=getattr(args, "device", None),
+                    command_id=getattr(args, "command_id", None),
+                    timeout=getattr(args, "timeout", 0),
+                )
             print(json.dumps(response, indent=2), flush=True)
             return 0 if response["ok"] else 1
         if getattr(args, "command_id", None) is not None:

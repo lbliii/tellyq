@@ -17,6 +17,7 @@ from unittest.mock import Mock
 import pytest
 
 import tellyq.mcp as mcp
+from tellyq import service_cli
 from tellyq.runner_ipc import IPCUnavailable
 
 pytest.importorskip("milo")
@@ -233,6 +234,16 @@ def test_stdio_handshake_tools_and_owner_parity(
             },
         )
         assert started["result"]["structuredContent"]["response"]["ticket_id"] == "mcp-start"
+        retried = _request(
+            process,
+            {
+                "jsonrpc": "2.0",
+                "id": 9,
+                "method": "tools/call",
+                "params": {"name": "start", "arguments": {"command_id": "mcp-start"}},
+            },
+        )
+        assert retried["result"]["structuredContent"] == started["result"]["structuredContent"]
         stopped = _request(
             process,
             {
@@ -278,6 +289,7 @@ def test_stdio_handshake_tools_and_owner_parity(
         process.stdin.close()
         process.wait(timeout=3)
         assert process.stdout is not None and process.stderr is not None
+        assert process.stdout.read() == ""
         process.stdout.close()
         process.stderr.close()
         from tellyq.service_cli import owner_command
@@ -377,9 +389,9 @@ def test_invalid_command_ids_are_bounded_before_owner_dispatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     owner = Mock(side_effect=AssertionError("owner must not be called"))
-    monkeypatch.setattr(mcp, "owner_command", owner)
-    for command_id in ("bad id", "a" * 129):
-        result = mcp._call("start", tmp_path, command_id=command_id)
+    monkeypatch.setattr(service_cli, "owner_command", owner)
+    for command_id in ("bad id", "a" * 129, ""):
+        result = service_cli.owner_tool_command("start", tmp_path, command_id=command_id)
         assert result["code"] == "invalid_command_id"
     owner.assert_not_called()
 
@@ -390,8 +402,8 @@ def test_owner_exception_material_is_redacted(
     secret = "/private/owner/runtime/session.sock bearer-token"
     for exception in (IPCUnavailable(secret), ValueError(secret)):
         owner = Mock(side_effect=exception)
-        monkeypatch.setattr(mcp, "owner_command", owner)
-        result = mcp._call("status", tmp_path)
+        monkeypatch.setattr(service_cli, "owner_command", owner)
+        result = service_cli.owner_tool_command("status", tmp_path)
         assert secret not in json.dumps(result)
         assert result["ok"] is False
 
