@@ -256,6 +256,11 @@ def test_stdio_handshake_tools_and_owner_parity(
         )
         tools = listed["result"]["tools"]
         assert {tool["name"] for tool in tools} == {"start", "status", "stop"}
+        assert all(
+            tool["outputSchema"]["required"] == ["code", "ok", "schema_version"]
+            and tool["outputSchema"]["properties"]["response"] == {"type": "object"}
+            for tool in tools
+        )
         assert (
             next(tool for tool in tools if tool["name"] == "status")["annotations"]["readOnlyHint"]
             is True
@@ -271,6 +276,8 @@ def test_stdio_handshake_tools_and_owner_parity(
             },
         )
         assert status["result"]["structuredContent"]["response"]["code"] == "status"
+        assert status["result"]["structuredContent"]["schema_version"] == 1
+        assert status["result"]["structuredContent"]["ok"] is True
         from tellyq.service_cli import owner_command
 
         assert status["result"]["structuredContent"]["response"] == owner_command(
@@ -326,6 +333,11 @@ def test_stdio_handshake_tools_and_owner_parity(
             },
         )
         assert invalid_id["result"]["structuredContent"]["code"] == "invalid_command_id"
+        assert invalid_id["result"]["structuredContent"]["ok"] is False
+        assert set(invalid_id["result"]["structuredContent"]["error"]) == {
+            "type",
+            "message",
+        }
         unknown = _request(
             process,
             {
@@ -492,7 +504,25 @@ def test_mcp_exposes_exact_tool_schemas(tmp_path: Path) -> None:
         "properties": {"command_id": command_id},
     }
     assert tools["status"]["inputSchema"] == {"type": "object", "properties": {}}
-    assert all(tool["outputSchema"] == {"type": "object"} for tool in tools.values())
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "schema_version": {"enum": [1], "type": "integer"},
+            "ok": {"type": "boolean"},
+            "code": {"type": "string"},
+            "response": {"type": "object"},
+            "error": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string"},
+                    "message": {"type": "string"},
+                },
+                "required": ["message", "type"],
+            },
+        },
+        "required": ["code", "ok", "schema_version"],
+    }
+    assert all(tool["outputSchema"] == output_schema for tool in tools.values())
     for spec in service_cli.OWNER_TOOL_SPECS:
         tool = tools[spec.name]
         assert tool["description"] == spec.description
