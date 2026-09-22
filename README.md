@@ -16,6 +16,11 @@ evidence and separate user visual confirmation. CLI, Python, Milo shell, and
 MCP now share the result envelope; the advertised MCP schema describes its
 stable fields while leaving the nested owner response opaque. See the
 [M3 acceptance record](docs/M3-ACCEPTANCE.md).
+M4's Netflix probe classified that route as assisted app launch. Plex is now the
+selected second-provider candidate because its server exposes library identity and
+playback sessions. The [first Plex checkpoint](docs/M4-PLEX-PROBE.md) found no
+local server or launchable native TV client and stopped at the trusted-install,
+account, and test-library setup gate before adapter work.
 
 ## First playback proof (M0)
 
@@ -94,7 +99,7 @@ visible advancement and audible nature sound in the distinct-video investigation
 
 For the next stages, see the [measurable milestone roadmap](docs/ROADMAP.md) and
 [architecture direction](docs/ARCHITECTURE.md). They cover typed contracts,
-reliable queueing, Milo CLI/MCP, subscription-service experiments, Cueby's
+reliable queueing, Milo CLI/MCP, second-provider experiments, Cueby's
 programming logic and an optional Chirp interface. These are planned milestones;
 the implemented behavior is described below.
 
