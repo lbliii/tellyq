@@ -105,3 +105,43 @@ acceptance gate from this slice. One supervised hardware start/status/stop run
 through an actual MCP client is also still required; use the existing quiet
 nature clips and record receiver evidence separately from command receipts and
 the user's visual confirmation. No live playback was performed in this batch.
+
+## Prepared supervised MCP checkpoint
+
+`scripts/checkpoint_mcp.py` is an opt-in MCP client for an already-running
+foreground owner. It uses the installed `tellyq-mcp --mcp` entry point and
+records protocol responses in a new exclusive directory under ignored
+`runtime/`. `trace` reads status only. `start --live` first checks that the
+owner's complete queue and target match the selected private manifest. It
+records a start intent and receipt, closes the MCP process, reopens it to read
+fresh receiver evidence, then sends a guarded stop and waits for observed stop.
+An acknowledgement alone never sets either observation flag. After an accepted
+or uncertain start, the runner attempts guarded stop even if observation fails
+or the operator interrupts. A definite start rejection causes no stop, so the
+checkpoint cannot cancel preexisting playback. Consult the private journal
+when any command outcome is uncertain. Closing MCP does not shut down the owner.
+
+For the later explicitly requested live session, copy
+`examples/mcp-checkpoint.json` into `runtime/`, fill in a fresh queue ID and
+the discovered receiver UUID, and start the foreground owner with that exact
+private manifest. From the repository root, choose a new output directory and
+record the tested Git revision:
+
+```sh
+uv run --locked --extra mcp python scripts/checkpoint_mcp.py trace \
+  --runtime runtime/mcp-owner --manifest runtime/mcp-checkpoint.json \
+  --output runtime/mcp-trace-1 --code-revision REVISION
+
+uv run --locked --extra mcp python scripts/checkpoint_mcp.py start --live \
+  --runtime runtime/mcp-owner --manifest runtime/mcp-checkpoint.json \
+  --output runtime/mcp-live-1 --code-revision REVISION
+```
+
+The default start observation window is 20 seconds, followed by up to 15
+seconds for stop evidence. Both are bounded options. The private summary
+reports command acknowledgement, receiver playback evidence, stop observation,
+and owner survival separately. Its `visual_confirmation` remains null and
+`live_acceptance` remains false until the operator records the user's visible
+TV confirmation and reviews the journal. The offline test uses a fake Unix
+owner and real Milo stdio; it never controls a receiver. The supervised run
+has not yet been requested or performed.
