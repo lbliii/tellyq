@@ -458,6 +458,25 @@ class MCPResult(TypedDict):
     error: NotRequired[MCPError]
 
 
+class MCPCheckpointSummary(TypedDict):
+    """Private checkpoint result; machine evidence excludes visual confirmation."""
+
+    schema_version: Literal[1]
+    mode: Literal["trace", "start"]
+    queue_id: str
+    code_revision: str
+    start_acknowledged: bool
+    receiver_playback_confirmed: bool
+    stop_acknowledged: bool
+    stop_observed: bool
+    owner_survived_mcp_exit: bool | None
+    interrupted: bool
+    visual_confirmation: None
+    live_acceptance: Literal[False]
+    start_command_id: NotRequired[str]
+    stop_command_id: NotRequired[str]
+
+
 class ServiceCheckpointTiming(TypedDict):
     action: IPCAction
     submitted_ms: float

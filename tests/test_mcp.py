@@ -108,6 +108,9 @@ class FakeOwner:
                         "playback": None,
                         "queue": {
                             "queue_id": "queue-a",
+                            "mode": "legacy",
+                            "items_truncated": False,
+                            "current_item_id": "item-a",
                             "target": {"device_id": _DEVICE, "route": "cast", "name": None},
                             "items": [
                                 {

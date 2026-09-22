@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "queue_id": "replace-with-a-new-mcp-checkpoint-id",
+  "target": {
+    "device_id": "00000000-0000-4000-8000-000000000000",
+    "route": "cast"
+  },
+  "items": [
+    {
+      "item_id": "forest-checkpoint",
+      "provider": "youtube",
+      "content_id": "-6_mbMXxdfg",
+      "title": "Abernethy Forest | 90 seconds in nature"
+    }
+  ]
+}
