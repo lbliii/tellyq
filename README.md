@@ -11,8 +11,9 @@ Three of four recent three-item attempts completed. The intermittent enqueue
 stall remains open as [issue #42](https://github.com/lbliii/tellyq/issues/42).
 See the [M2 closeout](docs/M2-ACCEPTANCE.md) for the complete evidence and limits.
 M3's Milo/MCP foundation is implemented as a local stdio surface with
-`start`, `status`, and `stop`; the full M3 CLI parity and live acceptance gate
-remain open.
+`start`, `status`, and `stop`. Its supervised hardware checkpoint passed with
+receiver evidence and separate user visual confirmation; broader CLI/Python/MCP
+parity remains open. See the [M3 MCP checkpoint](docs/M3-MCP-SECOND-CHECKPOINT.md).
 
 ## First playback proof (M0)
 

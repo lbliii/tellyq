@@ -20,13 +20,14 @@ the MCP exits and later shut down cleanly.
 | Stop command | MCP returned `accepted` at 15:34:33 UTC. This was a command receipt, not stop proof. |
 | Receiver stop | MCP status at 15:34:35 UTC showed the same attempt `stopped`, `ownership_lost: false`, the matching stop receipt, and reason `stop_observed`. |
 | Owner lifetime | The runner reported `owner_survived_mcp_exit: true`; later owner shutdown returned a stopped snapshot and closed its process. |
-| User visual observation | Pending the user's response after the run. |
+| User visual observation | After the run, the user answered yes when asked whether they saw the forest clip play and then return to the Chromecast home screen. This is visual evidence distinct from receiver telemetry. |
 
 The timed runner exited successfully and reported `start_acknowledged`,
 `receiver_playback_confirmed`, `stop_acknowledged`, `stop_observed`, and
-`owner_survived_mcp_exit` all true. Its generated `visual_confirmation` remains
-null and `live_acceptance` remains false until the user's separate observation
-is recorded and the journal is reviewed. This run satisfies the machine-side
-MCP start/status/stop checkpoint. Do not claim visible playback or full M3
-acceptance from the machine summary alone. Broader CLI/Python/MCP command
-definition parity remains open regardless of the visual result.
+`owner_survived_mcp_exit` all true. Its generated summary retains
+`visual_confirmation: null` and `live_acceptance: false` because it records
+only what the timed runner knew. The later user reply and journal review are
+preserved separately in private `review.json`. Together, the machine evidence
+and visual confirmation satisfy the M3 hardware start/status/stop checkpoint.
+Full M3 acceptance remains open because broader CLI/Python/MCP command
+definition parity has not been completed.
