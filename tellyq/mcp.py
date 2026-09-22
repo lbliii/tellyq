@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .service_cli import owner_tool_command
+from .service_cli import OWNER_TOOL_SPECS, OwnerToolSpec, owner_tool_command
 
 if TYPE_CHECKING:
     from milo import CLI
@@ -48,62 +49,33 @@ def build_cli(runtime: Path) -> CLI:
 
     # Milo 0.4.3 misrepresents recursive aliases and nullable values in output
     # schemas. Advertise an object here; owner_tool_command retains typed MCPResult.
-    @cli.command(
-        "start",
-        description=(
-            "Submit start to the owner and return its request ticket; acceptance is not "
-            "verified playback."
-        ),
-        annotations={
-            "readOnlyHint": False,
-            "destructiveHint": True,
-            "idempotentHint": False,
-            "openWorldHint": True,
-        },
-    )
-    def start(command_id: str | None = None) -> dict:
-        """Submit start through the owner; acceptance is not verified playback.
-
-        Args:
-            command_id: Optional stable ID used to retry or query this request.
-        """
-        return cast(dict, owner_tool_command("start", runtime, command_id=command_id))
-
-    @cli.command(
-        "status",
-        description="Read the owner's latest timestamped playback evidence.",
-        annotations={
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": True,
-        },
-    )
-    def status() -> dict:
-        """Read current owner state without changing playback."""
-        return cast(dict, owner_tool_command("status", runtime))
-
-    @cli.command(
-        "stop",
-        description=(
-            "Submit a guarded stop to the owner; acceptance is not verified receiver stop."
-        ),
-        annotations={
-            "readOnlyHint": False,
-            "destructiveHint": True,
-            "idempotentHint": True,
-            "openWorldHint": True,
-        },
-    )
-    def stop(command_id: str | None = None) -> dict:
-        """Submit a guarded stop; acceptance is not verified receiver stop.
-
-        Args:
-            command_id: Optional stable ID used to retry or query this request.
-        """
-        return cast(dict, owner_tool_command("stop", runtime, command_id=command_id))
+    for spec in OWNER_TOOL_SPECS:
+        handler = _handler(spec, runtime)
+        cli.command(spec.name, description=spec.description, annotations=spec.annotations())(
+            handler
+        )
 
     return cli
+
+
+def _handler(spec: OwnerToolSpec, runtime: Path) -> Callable[..., dict]:
+    if spec.accepts_command_id:
+
+        def with_id(command_id: str | None = None) -> dict:
+            """Submit a guarded owner command.
+
+            Args:
+                command_id: Optional stable ID used to retry or query this request.
+            """
+            return cast(dict, owner_tool_command(spec.name, runtime, command_id=command_id))
+
+        return with_id
+
+    def without_id() -> dict:
+        """Read current owner state without changing playback."""
+        return cast(dict, owner_tool_command(spec.name, runtime))
+
+    return without_id
 
 
 def main(argv: list[str] | None = None) -> int:

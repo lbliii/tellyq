@@ -1,6 +1,7 @@
 """CLI clients of the foreground owner; no device fallback after IPC selection."""
 
 import re
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
@@ -12,7 +13,55 @@ from .runner import RunnerCommand
 from .runner_ipc import IPCUnavailable, RunnerIPCClient, endpoint_path
 
 OWNER_COMMANDS = frozenset({"start", "status", "stop", "pause", "resume", "ticket", "shutdown"})
-OWNER_TOOL_COMMANDS = frozenset({"start", "status", "stop"})
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerToolSpec:
+    """Shared public input and MCP discovery metadata for one owner tool."""
+
+    name: str
+    description: str
+    accepts_command_id: bool
+    read_only: bool
+    destructive: bool
+    idempotent: bool
+
+    def annotations(self) -> dict[str, bool]:
+        return {
+            "readOnlyHint": self.read_only,
+            "destructiveHint": self.destructive,
+            "idempotentHint": self.idempotent,
+            "openWorldHint": True,
+        }
+
+
+OWNER_TOOL_SPECS = (
+    OwnerToolSpec(
+        name="start",
+        description="Submit start to the owner and return its request ticket; acceptance is not verified playback.",
+        accepts_command_id=True,
+        read_only=False,
+        destructive=True,
+        idempotent=False,
+    ),
+    OwnerToolSpec(
+        name="status",
+        description="Read the owner's latest timestamped playback evidence.",
+        accepts_command_id=False,
+        read_only=True,
+        destructive=False,
+        idempotent=True,
+    ),
+    OwnerToolSpec(
+        name="stop",
+        description="Submit a guarded stop to the owner; acceptance is not verified receiver stop.",
+        accepts_command_id=True,
+        read_only=False,
+        destructive=True,
+        idempotent=True,
+    ),
+)
+OWNER_TOOL_COMMANDS = frozenset(spec.name for spec in OWNER_TOOL_SPECS)
 _COMMAND_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _COMMAND_ID_MESSAGE = "command_id must be 1-128 characters: letters, digits, . _ : or -."
 
@@ -27,8 +76,9 @@ def owner_tool_command(
     """
     if command not in OWNER_TOOL_COMMANDS:
         return _tool_error("invalid_command", "Only start, status and stop are supported.")
-    if command == "status" and command_id is not None:
-        return _tool_error("invalid_command_id", "status does not accept command_id.")
+    spec = next(spec for spec in OWNER_TOOL_SPECS if spec.name == command)
+    if not spec.accepts_command_id and command_id is not None:
+        return _tool_error("invalid_command_id", f"{command} does not accept command_id.")
     if command_id is not None and (
         not isinstance(command_id, str) or _COMMAND_ID.fullmatch(command_id) is None
     ):

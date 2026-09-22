@@ -11,6 +11,7 @@ from .service import legacy_spec, load_manifest, run_foreground
 from .service_cli import (
     OWNER_COMMANDS,
     OWNER_TOOL_COMMANDS,
+    OWNER_TOOL_SPECS,
     has_endpoint,
     owner_command,
     owner_tool_command,
@@ -34,14 +35,15 @@ def main(argv: list[str] | None = None) -> int:
     queue = commands.add_parser("queue", help="save the one-item Bob Ross queue without playback")
     queue.add_argument("--device", required=True, help="exact UUID from discover")
     for name in ("probe", "start", "status", "stop", "pause", "resume"):
-        sub = commands.add_parser(name)
+        spec = next((spec for spec in OWNER_TOOL_SPECS if spec.name == name), None)
+        sub = commands.add_parser(name, help=spec.description if spec is not None else None)
         if name != "start":
             sub.add_argument("--device", required=name == "probe", help="exact UUID from discover")
         if name in {"probe", "start"}:
             sub.add_argument(
                 "--seconds", type=int, default=None, choices=range(5, 121), metavar="5..120"
             )
-        if name in {"start", "stop", "pause", "resume"}:
+        if (spec is not None and spec.accepts_command_id) or name in {"pause", "resume"}:
             sub.add_argument("--command-id", help="stable local owner command ID for retry/query")
     serve = commands.add_parser("serve", help="own one queue in the foreground; start is explicit")
     source = serve.add_mutually_exclusive_group(required=True)
